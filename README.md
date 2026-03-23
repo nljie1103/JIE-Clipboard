@@ -21,7 +21,7 @@
 =======================================
 【下载使用】
 1. 前往 Releases 页面：https://github.com/nljie1183/JIE-Clipboard/releases
-2. 下载最新版本的 JIE剪切板_v1.0.0_x64.zip（或exe文件）
+2. 下载最新版本的 JIE剪切板_v1.0.5_x64.zip（或exe文件）
 3. 解压后双击 JIE剪切板.exe 直接运行
 
 【运行要求】
