@@ -6,10 +6,10 @@
 
 帮你便捷管理剪贴板历史内容，支持加密保护，提升办公效率！
 
-[![Stars](https://img.shields.io/github/stars/nljie1183/JIE-Clipboard?style=for-the-badge&logo=github&color=f4c542)](https://github.com/nljie1183/JIE-Clipboard/stargazers)
-[![Forks](https://img.shields.io/github/forks/nljie1183/JIE-Clipboard?style=for-the-badge&logo=github&color=4493f8)](https://github.com/nljie1183/JIE-Clipboard/network/members)
-[![Release](https://img.shields.io/github/v/release/nljie1183/JIE-Clipboard?style=for-the-badge&logo=rocket&color=3fb950)](https://github.com/nljie1183/JIE-Clipboard/releases)
-[![License](https://img.shields.io/github/license/nljie1183/JIE-Clipboard?style=for-the-badge&color=9e6a03)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/nljie1103/JIE-Clipboard?style=for-the-badge&logo=github&color=f4c542)](https://github.com/nljie1103/JIE-Clipboard/stargazers)
+[![Forks](https://img.shields.io/github/forks/nljie1103/JIE-Clipboard?style=for-the-badge&logo=github&color=4493f8)](https://github.com/nljie1103/JIE-Clipboard/network/members)
+[![Release](https://img.shields.io/github/v/release/nljie1103/JIE-Clipboard?style=for-the-badge&logo=rocket&color=3fb950)](https://github.com/nljie1103/JIE-Clipboard/releases)
+[![License](https://img.shields.io/github/license/nljie1103/JIE-Clipboard?style=for-the-badge&color=9e6a03)](LICENSE)
 
 </div>
 
@@ -34,7 +34,7 @@
 
 ### 直接下载使用
 
-1. 前往 [Releases](https://github.com/nljie1183/JIE-Clipboard/releases) 页面
+1. 前往 [Releases](https://github.com/nljie1103/JIE-Clipboard/releases) 页面
 2. 下载最新版本的 `JIE剪切板.exe`
 3. 双击运行即可
 
@@ -69,7 +69,7 @@
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/nljie1183/JIE-Clipboard.git
+git clone https://github.com/nljie1103/JIE-Clipboard.git
 cd JIE-Clipboard
 
 # 2. 发布为独立单文件 exe
@@ -187,7 +187,7 @@ JIE-Clipboard/
 
 <div align="center">
 
-Made with ❤️ by [nljie1183](https://github.com/nljie1183)
+Made with ❤️ by [nljie1103](https://github.com/nljie1103)
 
 **如果觉得好用，请给个 ⭐ Star 支持一下！**
 
