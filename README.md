@@ -1,62 +1,194 @@
-# JIE-Clipboard
-📋 JIE剪切板
-一款轻量、高效的Windows剪切板增强工具，帮你便捷管理剪贴板内容，提升办公效率！
+<div align="center">
 
-【徽章信息】
-⭐ Stars: https://img.shields.io/github/stars/nljie1183/JIE-Clipboard?style=flat-square&color=yellow
-🔱 Forks: https://img.shields.io/github/forks/nljie1183/JIE-Clipboard?style=flat-square&color=blue
-🚀 Release: https://img.shields.io/github/release/nljie1183/JIE-Clipboard?style=flat-square&color=green
+# 📋 JIE 剪切板
 
-=======================================
-✨ 功能特性
-=======================================
-- 🚀 轻量无广告，单EXE文件直接运行，无需安装
-- 📝 记录多段剪贴板历史，支持一键复制/删除
-- ⌨️ 自定义快捷键，快速调用剪切板
-- 💾 本地数据持久化，重启不丢失
-- 🖥️ 适配Windows 10/11 x64系统
+**一款轻量、高效、安全的 Windows 剪贴板增强工具**
 
-=======================================
-📥 快速开始
-=======================================
-【下载使用】
-1. 前往 Releases 页面：https://github.com/nljie1183/JIE-Clipboard/releases
-2. 下载最新版本的 JIE剪切板_v1.0.5_x64.zip（或exe文件）
-3. 解压后双击 JIE剪切板.exe 直接运行
+帮你便捷管理剪贴板历史内容，支持加密保护，提升办公效率！
 
-【运行要求】
-- 操作系统：Windows 10/11 64位
-- 无需依赖.NET框架/VC++运行库（已打包）
+[![Stars](https://img.shields.io/github/stars/nljie1183/JIE-Clipboard?style=for-the-badge&logo=github&color=f4c542)](https://github.com/nljie1183/JIE-Clipboard/stargazers)
+[![Forks](https://img.shields.io/github/forks/nljie1183/JIE-Clipboard?style=for-the-badge&logo=github&color=4493f8)](https://github.com/nljie1183/JIE-Clipboard/network/members)
+[![Release](https://img.shields.io/github/v/release/nljie1183/JIE-Clipboard?style=for-the-badge&logo=rocket&color=3fb950)](https://github.com/nljie1183/JIE-Clipboard/releases)
+[![License](https://img.shields.io/github/license/nljie1183/JIE-Clipboard?style=for-the-badge&color=9e6a03)](LICENSE)
 
-=======================================
-🖼️ 界面预览
-=======================================
-截图地址：https://github.com/nljie1183/JIE-Clipboard/raw/main/screenshot.png
-（将工具截图命名为screenshot.png放到仓库根目录即可显示）
+</div>
 
-=======================================
-🔧 开发/编译说明
-=======================================
-【环境要求】
-- .NET 8.0 SDK（替换为你实际使用的框架版本）
-- Visual Studio 2022 / Rider
+---
 
-【编译命令】
-git clone git@github.com:nljie1183/JIE-Clipboard.git
+## ✨ 功能特性
+
+| 功能 | 说明 |
+|:---|:---|
+| 🚀 **轻量便携** | 单 EXE 文件直接运行，无需安装，无广告 |
+| 📝 **多格式支持** | 文本、富文本、图片、文件、视频、文件夹 |
+| 🔒 **AES-256 加密** | PBKDF2 密码派生（100,000 次迭代），保护敏感数据 |
+| ⌨️ **全局快捷键** | 自定义快捷键，随时唤醒（默认 `Ctrl+1`） |
+| 🎨 **主题切换** | 浅色 / 深色 / 跟随系统，支持自定义主题色和字体 |
+| 💾 **数据持久化** | 本地 JSON 存储，重启不丢失，支持导出导入备份 |
+| 🛡️ **安全防护** | 密码错误指数级锁定、防时间篡改、可选超限自动销毁 |
+| 📌 **智能管理** | 置顶、去重、过期自动清理、复制次数限制 |
+
+---
+
+## 📥 快速开始
+
+### 直接下载使用
+
+1. 前往 [Releases](https://github.com/nljie1183/JIE-Clipboard/releases) 页面
+2. 下载最新版本的 `JIE剪切板.exe`
+3. 双击运行即可
+
+> **运行要求：** Windows 10/11 64 位，无需安装 .NET 运行时（已内置打包）
+
+### 基本使用
+
+- **唤醒窗口：** 按 `Ctrl+1`（可自定义）
+- **复制粘贴：** 点击记录自动复制并粘贴到上一个窗口
+- **托盘操作：** 左键单击托盘图标显示窗口，右键打开菜单
+- **关闭窗口：** 点击关闭按钮会最小化到托盘（右键托盘→退出 才是真正退出）
+
+---
+
+## 🖼️ 界面预览
+
+![界面预览](screenshot.png)
+
+---
+
+## 🏗️ 从源码构建
+
+### 环境要求
+
+| 依赖 | 版本 |
+|:---|:---|
+| .NET SDK | 8.0 或更高 |
+| 操作系统 | Windows 10/11 x64 |
+| IDE（可选） | Visual Studio 2022 / VS Code / Rider |
+
+### 构建步骤
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/nljie1183/JIE-Clipboard.git
 cd JIE-Clipboard
-dotnet publish -c Release -r win-x64 --self-contained true
 
-=======================================
-📄 许可证
-=======================================
-本项目采用 MIT 许可证开源 - 详见 LICENSE 文件
+# 2. 发布为独立单文件 exe
+dotnet publish -c Release
+```
 
-=======================================
-🙏 致谢
-=======================================
-- 感谢 .NET 开源框架提供的基础能力
-- 感谢所有测试和反馈的用户
+构建产物位于 `bin/Release/win-x64/publish/`：
 
-=======================================
-Made with ❤️ by nljie1183
-=======================================
+```
+publish/
+├── JIE剪切板.exe    ← 独立运行的单文件程序（约 71MB，内含 .NET 运行时）
+├── icon.ico          ← 应用图标
+└── icon.png          ← 高清托盘图标
+```
+
+> **提示：** 如果构建失败提示 `Access Denied`，请先关闭正在运行的 JIE剪切板.exe
+
+### 创建桌面快捷方式（可选）
+
+在项目目录下执行 PowerShell：
+
+```powershell
+$ws = New-Object -ComObject WScript.Shell
+$s = $ws.CreateShortcut("$([Environment]::GetFolderPath('Desktop'))\JIE剪切板.lnk")
+$s.TargetPath = "$PWD\bin\Release\win-x64\publish\JIE剪切板.exe"
+$s.WorkingDirectory = "$PWD\bin\Release\win-x64\publish"
+$s.IconLocation = "$PWD\bin\Release\win-x64\publish\JIE剪切板.exe,0"
+$s.Save()
+```
+
+---
+
+## 📁 项目结构
+
+```
+JIE-Clipboard/
+├── Program.cs                 # 程序入口（单实例检测 + 全局异常处理）
+├── MainForm.cs                # 主窗口（导航布局、托盘、剪贴板监听、快捷键）
+├── icon.ico / icon.png        # 应用图标资源
+│
+├── Models/                    # 数据模型
+│   ├── AppConfig.cs           #   应用配置
+│   └── ClipboardRecord.cs     #   剪贴板记录（支持 6 种内容类型）
+│
+├── Services/                  # 核心服务
+│   ├── ClipboardService.cs    #   剪贴板读写
+│   ├── EncryptionService.cs   #   AES-256-CBC 加密
+│   ├── FileService.cs         #   数据持久化（JSON）
+│   ├── HotkeyService.cs       #   全局快捷键（Win32 API）
+│   ├── LogService.cs          #   日志记录
+│   └── ThemeService.cs        #   主题管理
+│
+├── Controls/                  # 自定义控件
+│   ├── NavigationListBox.cs   #   导航列表（GDI+ 自绘）
+│   ├── RecordListPanel.cs     #   记录列表（虚拟滚动）
+│   └── ToggleSwitch.cs        #   开关控件
+│
+├── Dialogs/                   # 对话框
+│   ├── EditRecordDialog.cs    #   编辑记录
+│   └── PasswordDialog.cs      #   密码输入
+│
+├── Pages/                     # 设置页面
+│   ├── AllRecordsPage.cs      #   全部记录
+│   ├── GeneralSettingsPage.cs #   通用设置
+│   ├── HotkeyPage.cs          #   快捷键设置
+│   ├── AppearancePage.cs      #   外观主题
+│   ├── SecurityPage.cs        #   安全防护
+│   ├── ExportImportPage.cs    #   导出导入
+│   └── AboutPage.cs           #   关于
+│
+└── Native/
+    └── Win32Api.cs            # Windows API 声明（P/Invoke）
+```
+
+---
+
+## 🔧 技术栈
+
+| 技术 | 用途 |
+|:---|:---|
+| .NET 8.0 LTS | 运行时框架 |
+| WinForms | UI 框架 |
+| C# 12 | 编程语言 |
+| System.Security.Cryptography | AES-256 加密 + PBKDF2 |
+| Win32 API (P/Invoke) | 剪贴板监听、全局快捷键、输入模拟 |
+| System.Text.Json | 数据序列化 |
+
+---
+
+## 💾 数据存储
+
+| 文件 | 路径 | 说明 |
+|:---|:---|:---|
+| config.json | `%AppData%\JIE剪切板\` | 应用配置 |
+| records.json | `%AppData%\JIE剪切板\`（可自定义） | 剪贴板记录 |
+| Images/ | `%AppData%\JIE剪切板\`（可自定义） | 图片文件 |
+| Logs/ | `%AppData%\JIE剪切板\` | 日志（自动清理 7 天前） |
+
+> 可在「通用设置」中更改 records 和 images 的存储位置
+
+---
+
+## 📄 许可证
+
+本项目采用 [MIT](LICENSE) 许可证开源。
+
+---
+
+## 🙏 致谢
+
+- [.NET](https://dotnet.microsoft.com/) — 开源跨平台框架
+- 感谢所有 Star、Fork 和反馈的用户
+
+---
+
+<div align="center">
+
+Made with ❤️ by [nljie1183](https://github.com/nljie1183)
+
+**如果觉得好用，请给个 ⭐ Star 支持一下！**
+
+</div>
