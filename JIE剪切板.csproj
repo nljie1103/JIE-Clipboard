@@ -9,10 +9,10 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>JIE剪切板</AssemblyName>
     <RootNamespace>JIE剪切板</RootNamespace>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.9</AssemblyVersion>
+    <FileVersion>1.0.9</FileVersion>
     <Product>JIE剪切板</Product>
-    <Company>JIE剪切板</Company>
+    <Company>牛连杰</Company>
     <Copyright>Copyright © 2026 JIE剪切板</Copyright>
     <Description>Windows剪贴板历史记录管理工具</Description>
 
