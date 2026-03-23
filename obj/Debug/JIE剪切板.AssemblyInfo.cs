@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCopyrightAttribute("Copyright © 2026 JIE剪切板")]
 [assembly: System.Reflection.AssemblyDescriptionAttribute("Windows剪贴板历史记录管理工具")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3853017e2fa066b096e561013f2f4187086a7980")]
 [assembly: System.Reflection.AssemblyProductAttribute("JIE剪切板")]
 [assembly: System.Reflection.AssemblyTitleAttribute("JIE剪切板")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
