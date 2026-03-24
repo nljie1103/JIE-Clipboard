@@ -5,19 +5,29 @@ using JIE剪切板.Services;
 
 namespace JIE剪切板.Pages;
 
+/// <summary>
+/// “全部记录”页面。
+/// 显示所有剪贴板记录，支持：
+/// - 搜索过滤（带防抖动）
+/// - 批量操作（清除全部/按日期清除/清除非固定）
+/// - 点击复制到剪贴板 + 自动粘贴
+/// - 右键菜单（编辑/删除/置顶/复制）
+/// - 加密记录的密码验证、锁定、自动删除逻辑
+/// - 底部状态栏显示统计信息
+/// </summary>
 public class AllRecordsPage : UserControl
 {
-    private TextBox _searchBox = null!;
-    private Panel _buttonPanel = null!;
-    private RecordListPanel _recordList = null!;
-    private Panel _statsBar = null!;
+    private TextBox _searchBox = null!;              // 搜索输入框
+    private Panel _buttonPanel = null!;              // 操作按钮区域
+    private RecordListPanel _recordList = null!;     // 记录列表控件
+    private Panel _statsBar = null!;                 // 底部统计栏
 
 
     private readonly MainForm _mainForm;
-    private string _searchText = "";
-    private System.Windows.Forms.Timer? _searchDebounceTimer;
-    private ContextMenuStrip? _recordContextMenu;
-    private ClipboardRecord? _contextMenuRecord;
+    private string _searchText = "";                 // 当前搜索关键词
+    private System.Windows.Forms.Timer? _searchDebounceTimer; // 搜索防抖动计时器
+    private ContextMenuStrip? _recordContextMenu;    // 右键上下文菜单
+    private ClipboardRecord? _contextMenuRecord;     // 当前右键点击的记录
 
     public AllRecordsPage(MainForm mainForm)
     {
@@ -27,9 +37,10 @@ public class AllRecordsPage : UserControl
         InitializeControls();
     }
 
+    /// <summary>初始化页面 UI：搜索栏、操作按钮、记录列表、状态栏、右键菜单</summary>
     private void InitializeControls()
     {
-        // Stats bar (bottom, fixed)
+        // 统计栏（底部固定）
         _statsBar = new Panel
         {
             Dock = DockStyle.Bottom,
@@ -39,7 +50,7 @@ public class AllRecordsPage : UserControl
         };
         _statsBar.Paint += StatsBar_Paint;
 
-        // Search panel (top)
+        // 搜索面板（顶部）
         var searchPanel = new Panel { Dock = DockStyle.Top, Height = DpiHelper.Scale(50), Padding = new Padding(DpiHelper.Scale(15), DpiHelper.Scale(10), DpiHelper.Scale(15), DpiHelper.Scale(5)) };
         _searchBox = new TextBox
         {
@@ -53,7 +64,7 @@ public class AllRecordsPage : UserControl
         _searchBox.TextChanged += SearchBox_TextChanged;
         searchPanel.Controls.Add(_searchBox);
 
-        // Button panel
+        // 操作按钮区
         _buttonPanel = new Panel { Dock = DockStyle.Top, Height = DpiHelper.Scale(45), Padding = new Padding(DpiHelper.Scale(15), DpiHelper.Scale(5), DpiHelper.Scale(15), DpiHelper.Scale(5)) };
         var btnClearAll = CreateButton("清除全部记录", Color.FromArgb(220, 53, 69));
         btnClearAll.Click += BtnClearAll_Click;
@@ -68,16 +79,16 @@ public class AllRecordsPage : UserControl
         flow.Controls.AddRange(new Control[] { btnClearAll, btnClearBefore, btnClearAfter, btnClearUnpinned });
         _buttonPanel.Controls.Add(flow);
 
-        // Record list
+        // 记录列表控件
         _recordList = new RecordListPanel { Dock = DockStyle.Fill };
         _recordList.RecordClicked += RecordList_RecordClicked;
         _recordList.RecordRightClicked += RecordList_RecordRightClicked;
 
-        // Search debounce timer
+        // 搜索防抖计时器
         _searchDebounceTimer = new System.Windows.Forms.Timer { Interval = 300 };
         _searchDebounceTimer.Tick += (_, _) => { _searchDebounceTimer.Stop(); RefreshRecords(); };
 
-        // Reusable context menu
+        // 可复用的右键菜单
         _recordContextMenu = new ContextMenuStrip();
         var menuEdit = new ToolStripMenuItem("编辑记录");
         menuEdit.Click += (_, _) => { if (_contextMenuRecord != null) EditRecord(_contextMenuRecord); };
@@ -111,6 +122,7 @@ public class AllRecordsPage : UserControl
         Controls.Add(_statsBar);
     }
 
+    /// <summary>创建统一样式的操作按钮</summary>
     private Button CreateButton(string text, Color borderColor)
     {
         var btn = new Button
@@ -128,6 +140,7 @@ public class AllRecordsPage : UserControl
         return btn;
     }
 
+    /// <summary>刷新记录列表：应用搜索过滤，按置顶+时间排序，更新状态栏</summary>
     public void RefreshRecords()
     {
         try
@@ -135,7 +148,7 @@ public class AllRecordsPage : UserControl
             var records = _mainForm.Records;
             var filtered = ApplySearch(records);
 
-            // Sort: pinned first, then by time desc
+            // 排序：置顶在前，然后按时间倒序
             filtered = filtered.OrderByDescending(r => r.IsPinned).ThenByDescending(r => r.CreateTime).ToList();
             _recordList.SetRecords(filtered);
             UpdateStats();
@@ -146,6 +159,7 @@ public class AllRecordsPage : UserControl
         }
     }
 
+    /// <summary>搜索过滤逻辑：匹配预览文本和时间，加密记录仅匹配“加密内容”关键词</summary>
     private List<ClipboardRecord> ApplySearch(List<ClipboardRecord> records)
     {
         if (string.IsNullOrEmpty(_searchText))
@@ -158,7 +172,7 @@ public class AllRecordsPage : UserControl
         {
             if (record.IsEncrypted)
             {
-                // Search encrypted records
+                // 搜索加密记录：仅匹配"加密内容"关键词
                 if ("加密内容".Contains(keyword))
                 {
                     result.Add(record);
@@ -167,14 +181,13 @@ public class AllRecordsPage : UserControl
 
                 if (_mainForm.Config.AllowSearchEncryptedContent)
                 {
-                    // Temp decrypt for search (risky, user confirmed)
-                    // We cannot decrypt without password, so encrypted search is limited
-                    // to matching the literal "[加密内容]" text
+                    // 临时解密搜索（需密码，目前仅支持匹配"加密内容"文字）
+                    // 由于无法在无密码的情况下解密，加密搜索功能受限
                 }
                 continue;
             }
 
-            // Search unencrypted records
+            // 搜索非加密记录：匹配预览文本和时间
             var preview = ClipboardService.GetContentPreview(record, 500).ToLower();
             var timeStr = record.CreateTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm").ToLower();
             if (preview.Contains(keyword) || timeStr.Contains(keyword))
@@ -183,6 +196,7 @@ public class AllRecordsPage : UserControl
         return result;
     }
 
+    /// <summary>搜索框文本变化：启动防抖动计时器（300ms 后刷新）</summary>
     private void SearchBox_TextChanged(object? sender, EventArgs e)
     {
         _searchText = _searchBox.Text;
@@ -190,6 +204,7 @@ public class AllRecordsPage : UserControl
         _searchDebounceTimer?.Start();
     }
 
+    /// <summary>左键点击记录：复制到剪贴板并自动粘贴（加密记录需输入密码）</summary>
     private void RecordList_RecordClicked(object? sender, ClipboardRecord record)
     {
         try
@@ -200,14 +215,14 @@ public class AllRecordsPage : UserControl
                 return;
             }
 
-            // Check copy count limit
+            // 检查是否超过最大复制次数限制
             if (record.MaxCopyCount > 0 && record.CurrentCopyCount >= record.MaxCopyCount)
             {
                 MessageBox.Show(this, "该记录已达到最大复制次数限制。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            // Write to clipboard and auto-paste
+            // 写入剪贴板并自动粘贴
             _mainForm.CopyAndPasteRecord(record);
         }
         catch (Exception ex)
@@ -216,6 +231,12 @@ public class AllRecordsPage : UserControl
         }
     }
 
+    /// <summary>
+    /// 处理加密记录的点击逻辑：
+    /// 1. 检查锁定状态 + 时间篡改检测
+    /// 2. 弹出密码输入框
+    /// 3. 验证密码 → 成功则解密粘贴；失败则计数、锁定或删除
+    /// </summary>
     private void HandleEncryptedRecordClick(ClipboardRecord record)
     {
         var maxAttempts = record.UseGlobalSecuritySettings
@@ -228,10 +249,10 @@ public class AllRecordsPage : UserControl
             ? _mainForm.Config.DefaultAutoDeleteOnExceed
             : record.AutoDeleteOnExceed;
 
-        // Step 1: Check lock state with time tamper detection
+        // 步骤一：检查锁定状态（含时间篡改检测）
         if (record.LockUntil.HasValue && record.LockUntil.Value > DateTime.Now)
         {
-            // Time tamper check
+            // 时间篡改检测：系统时间被回拨超过1分钟则拒绝解锁
             if (record.LastKnownSystemTime.HasValue && DateTime.Now < record.LastKnownSystemTime.Value.AddMinutes(-1))
             {
                 MessageBox.Show(this, "检测到系统时间可能被修改，锁定状态不会被解除。",
@@ -245,30 +266,30 @@ public class AllRecordsPage : UserControl
             return;
         }
 
-        // Auto-release expired lock
+        // 自动释放已过期的锁定
         if (record.LockUntil.HasValue && record.LockUntil.Value <= DateTime.Now)
         {
             record.PasswordFailCount = 0;
             record.LockUntil = null;
         }
 
-        // Step 2: Show password dialog
+        // 步骤二：弹出密码输入对话框
         using var dialog = new PasswordDialog();
         dialog.TopMost = true;
         if (dialog.ShowDialog(this) != DialogResult.OK)
             return;
 
-        // Step 3: Verify password
+        // 步骤三：验证密码
         if (EncryptionService.VerifyPassword(record, dialog.Password))
         {
-            // Correct: reset counters
+            // 密码正确：重置所有安全计数器
             record.PasswordFailCount = 0;
             record.CumulativeLockCount = 0;
             record.LockUntil = null;
             record.LastKnownSystemTime = null;
             _mainForm.SaveData();
 
-            // Decrypt and paste
+            // 解密内容并粘贴到剪贴板
             var result = EncryptionService.DecryptRecord(record, dialog.Password);
             if (result.HasValue)
             {
@@ -282,7 +303,7 @@ public class AllRecordsPage : UserControl
         }
         else
         {
-            // Wrong password
+            // 密码错误：累加失败计数
             record.PasswordFailCount++;
             record.LastKnownSystemTime = DateTime.Now;
             _mainForm.SaveData();
@@ -299,7 +320,7 @@ public class AllRecordsPage : UserControl
                 else
                 {
                     record.CumulativeLockCount++;
-                    int lockMinutes = baseLock * (1 << (record.CumulativeLockCount - 1)); // Double each time
+                    int lockMinutes = baseLock * (1 << (record.CumulativeLockCount - 1)); // 每次锁定时长翻倍
                     record.LockUntil = DateTime.Now.AddMinutes(lockMinutes);
                     record.PasswordFailCount = 0;
                     _mainForm.SaveData();
@@ -319,10 +340,11 @@ public class AllRecordsPage : UserControl
         }
     }
 
+    /// <summary>右键点击记录：显示上下文菜单，动态更新置顶菜单文本</summary>
     private void RecordList_RecordRightClicked(object? sender, (ClipboardRecord record, Point location) args)
     {
         _contextMenuRecord = args.record;
-        // Update pin text
+        // 动态更新置顶/取消置顶菜单文本
         if (_recordContextMenu != null && _recordContextMenu.Items.Count > 2
             && _recordContextMenu.Items[2] is ToolStripMenuItem pinItem)
         {
@@ -331,6 +353,7 @@ public class AllRecordsPage : UserControl
         _recordContextMenu?.Show(_recordList, args.location);
     }
 
+    /// <summary>编辑记录：加密记录需先验证密码，然后打开编辑对话框</summary>
     private void EditRecord(ClipboardRecord record)
     {
         string? decryptedContent = null;
@@ -351,7 +374,7 @@ public class AllRecordsPage : UserControl
                 return;
             }
 
-            // Decrypt content for display in editor
+            // 解密内容用于编辑器中显示
             password = pwDialog.Password;
             var result = EncryptionService.DecryptRecord(record, password);
             if (result.HasValue)
@@ -371,6 +394,7 @@ public class AllRecordsPage : UserControl
         }
     }
 
+    /// <summary>清除全部记录（需确认）</summary>
     private void BtnClearAll_Click(object? sender, EventArgs e)
     {
         if (MessageBox.Show(this, "确定要清除全部记录吗？此操作不可撤销。", "确认清除",
@@ -391,6 +415,7 @@ public class AllRecordsPage : UserControl
         ShowDateClearDialog(false);
     }
 
+    /// <summary>显示按日期清除的对话框（支持清除指定日期前/后的记录）</summary>
     private void ShowDateClearDialog(bool isBefore)
     {
         using var form = new Form
@@ -430,6 +455,7 @@ public class AllRecordsPage : UserControl
         }
     }
 
+    /// <summary>清除所有非固定记录（需确认）</summary>
     private void BtnClearUnpinned_Click(object? sender, EventArgs e)
     {
         if (MessageBox.Show(this, "确定要清除所有非固定记录吗？", "确认清除",
@@ -447,6 +473,7 @@ public class AllRecordsPage : UserControl
         _statsBar.Invalidate();
     }
 
+    /// <summary>自绘状态栏：显示全部记录数、置顶数、加密数、搜索结果数</summary>
     private void StatsBar_Paint(object? sender, PaintEventArgs e)
     {
         try
@@ -455,7 +482,7 @@ public class AllRecordsPage : UserControl
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
             g.Clear(ThemeService.StatsBarBackground);
 
-            // Top border line
+            // 顶部分界线
             using var borderPen = new Pen(ThemeService.BorderColor, 1);
             g.DrawLine(borderPen, 0, 0, _statsBar.Width, 0);
 
@@ -480,6 +507,7 @@ public class AllRecordsPage : UserControl
         catch { }
     }
 
+    /// <summary>绘制单个统计项（标签+数字+后缀），返回最终 X 坐标</summary>
     private int DrawStat(Graphics g, string label, string number, string suffix, int x, Font font, Font boldFont, Brush grayBrush, Brush themeBrush)
     {
         int y = (_statsBar.Height - (int)font.GetHeight()) / 2;

@@ -4,21 +4,33 @@ using System.Drawing.Drawing2D;
 
 namespace JIE剪切板.Controls;
 
+/// <summary>
+/// 记录列表面板控件。
+/// 显示剪贴板记录列表，支持：
+/// - 虚拟滚动（只绘制可见区域的记录，性能优化）
+/// - 图片缩略图缓存（含加密图片的解密预览）
+/// - 左键点击复制/右键上下文菜单
+/// - 主题适配、DPI 自适应
+/// </summary>
 public class RecordListPanel : Panel
 {
-    private List<ClipboardRecord> _records = new();
-    private int _hoverIndex = -1;
-    private int _scrollOffset = 0;
-    private int _itemHeight = DpiHelper.Scale(60);
-    private readonly VScrollBar _scrollBar;
-    private readonly Dictionary<string, Image?> _thumbnailCache = new();
-    private readonly Font _pinFont;
-    private Font? _smallFont;
-    private float _lastSmallFontSize;
+    private List<ClipboardRecord> _records = new(); // 当前显示的记录列表
+    private int _hoverIndex = -1;                    // 鼠标悬停的记录索引
+    private int _scrollOffset = 0;                   // 当前滚动偏移量（像素）
+    private int _itemHeight = DpiHelper.Scale(60);   // 每条记录的高度
+    private readonly VScrollBar _scrollBar;          // 右侧滚动条
+    private readonly Dictionary<string, Image?> _thumbnailCache = new(); // 图片缩略图缓存
+    private readonly Font _pinFont;                  // 置顶图标的 Emoji 字体
+    private Font? _smallFont;                        // 时间显示的小字体
+    private float _lastSmallFontSize;                // 缓存小字体的大小
 
+    /// <summary>左键点击记录事件（用于复制到剪贴板）</summary>
     public event EventHandler<ClipboardRecord>? RecordClicked;
+
+    /// <summary>右键点击记录事件（用于显示上下文菜单）</summary>
     public event EventHandler<(ClipboardRecord record, Point location)>? RecordRightClicked;
 
+    /// <summary>构造函数：启用双缓冲绘制，初始化滚动条</summary>
     public RecordListPanel()
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
@@ -32,6 +44,7 @@ public class RecordListPanel : Panel
         _pinFont = new Font("Segoe UI Emoji", DpiHelper.ScaleF(9f));
     }
 
+    /// <summary>设置待显示的记录列表，重置滚动位置并重绘</summary>
     public void SetRecords(List<ClipboardRecord> records)
     {
         _records = records;
@@ -43,6 +56,7 @@ public class RecordListPanel : Panel
         Invalidate();
     }
 
+    /// <summary>设置每条记录的高度（DPI 自适应）</summary>
     public void SetItemHeight(int height)
     {
         _itemHeight = Math.Max(DpiHelper.Scale(40), DpiHelper.Scale(height));
@@ -50,6 +64,7 @@ public class RecordListPanel : Panel
         Invalidate();
     }
 
+    /// <summary>根据记录总高度和面板高度更新滚动条可见性和范围</summary>
     private void UpdateScrollBar()
     {
         int totalHeight = _records.Count * _itemHeight;
@@ -85,6 +100,11 @@ public class RecordListPanel : Panel
         base.OnMouseWheel(e);
     }
 
+    /// <summary>
+    /// 自绘记录列表。
+    /// 使用虚拟滚动优化：只绘制当前可见范围内的记录，避免全量绘制。
+    /// 无记录时显示“暂无记录”提示。
+    /// </summary>
     protected override void OnPaint(PaintEventArgs e)
     {
         try
@@ -123,16 +143,19 @@ public class RecordListPanel : Panel
         }
     }
 
+    /// <summary>
+    /// 绘制单条记录：悬停背景 + 置顶图标 + 内容预览(含图片缩略图) + 时间 + 分割线
+    /// </summary>
     private void DrawRecord(Graphics g, ClipboardRecord record, Rectangle rect, bool isHover)
     {
-        // Background
+        // 悬停背景高亮
         if (isHover)
         {
             using var brush = new SolidBrush(ThemeService.HoverColor);
             g.FillRectangle(brush, rect);
         }
 
-        // Pin indicator
+        // 置顶图标
         if (record.IsPinned)
         {
             using var pinBrush = new SolidBrush(ThemeService.ThemeColor);
@@ -143,7 +166,7 @@ public class RecordListPanel : Panel
         int rightMargin = DpiHelper.Scale(100);
         int contentWidth = rect.Width - leftMargin - rightMargin;
 
-        // Content preview
+        // 内容预览文本
         if (record.ContentType == ClipboardContentType.Image && !record.IsEncrypted)
         {
             DrawImageThumbnail(g, record, new Rectangle(leftMargin, rect.Y + 4, _itemHeight - 8, _itemHeight - 8));
@@ -164,7 +187,7 @@ public class RecordListPanel : Panel
             g.DrawString(preview, ThemeService.GlobalFont, textBrush, textRect, sf);
         }
 
-        // Time
+        // 时间显示
         var timeStr = FormatTime(record.CreateTime);
         var timeRect = new Rectangle(rect.Right - rightMargin, rect.Y + DpiHelper.Scale(8), rightMargin - DpiHelper.Scale(10), _itemHeight - DpiHelper.Scale(16));
         using (var timeBrush = new SolidBrush(ThemeService.SecondaryTextColor))
@@ -173,11 +196,16 @@ public class RecordListPanel : Panel
             g.DrawString(timeStr, GetSmallFont(), timeBrush, timeRect, sf);
         }
 
-        // Bottom border
+        // 底部分割线
         using var pen = new Pen(ThemeService.BorderColor, 1);
         g.DrawLine(pen, rect.Left + DpiHelper.Scale(10), rect.Bottom - 1, rect.Right - DpiHelper.Scale(10), rect.Bottom - 1);
     }
 
+    /// <summary>
+    /// 绘制图片缩略图。
+    /// 支持加密图片（.enc）的内存解密显示，解密后立即清零原始字节。
+    /// 缩略图会被缓存，避免每次重绘都解密。
+    /// </summary>
     private void DrawImageThumbnail(Graphics g, ClipboardRecord record, Rectangle rect)
     {
         try
@@ -187,7 +215,7 @@ public class RecordListPanel : Panel
                 byte[]? imageBytes = null;
                 if (record.Content.EndsWith(".enc", StringComparison.OrdinalIgnoreCase) && File.Exists(record.Content))
                 {
-                    // Decrypt encrypted image in memory
+                    // 在内存中解密加密图片
                     imageBytes = FileService.DecryptFileBytes(record.Content);
                 }
                 else if (File.Exists(record.Content))
@@ -200,6 +228,7 @@ public class RecordListPanel : Panel
                     using var ms = new MemoryStream(imageBytes);
                     using var original = Image.FromStream(ms);
                     thumb = original.GetThumbnailImage(rect.Width, rect.Height, () => false, IntPtr.Zero);
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(imageBytes);
                 }
                 _thumbnailCache[record.Id] = thumb;
             }
@@ -219,6 +248,7 @@ public class RecordListPanel : Panel
         }
     }
 
+    /// <summary>鼠标移动时更新悬停高亮索引</summary>
     protected override void OnMouseMove(MouseEventArgs e)
     {
         int index = (e.Y + _scrollOffset) / _itemHeight;
@@ -237,6 +267,7 @@ public class RecordListPanel : Panel
         base.OnMouseLeave(e);
     }
 
+    /// <summary>鼠标点击时触发对应事件（左键=复制，右键=上下文菜单）</summary>
     protected override void OnMouseClick(MouseEventArgs e)
     {
         int index = (e.Y + _scrollOffset) / _itemHeight;
@@ -250,6 +281,7 @@ public class RecordListPanel : Panel
         base.OnMouseClick(e);
     }
 
+    /// <summary>格式化时间为友好显示（今天/昨天/日期）</summary>
     private static string FormatTime(DateTime utcTime)
     {
         var local = utcTime.ToLocalTime();
@@ -259,6 +291,7 @@ public class RecordListPanel : Panel
         return local.ToString("MM-dd HH:mm");
     }
 
+    /// <summary>清理缩略图缓存（释放内存）</summary>
     public void ClearThumbnailCache()
     {
         foreach (var img in _thumbnailCache.Values)
@@ -266,6 +299,7 @@ public class RecordListPanel : Panel
         _thumbnailCache.Clear();
     }
 
+    /// <summary>获取或创建时间显示用的小字体（比全局字体小 1pt）</summary>
     private Font GetSmallFont()
     {
         var targetSize = Math.Max(6f, ThemeService.GlobalFont.Size - 1);

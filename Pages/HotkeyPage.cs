@@ -3,15 +3,20 @@ using JIE剪切板.Services;
 
 namespace JIE剪切板.Pages;
 
+/// <summary>
+/// “快捷键”设置页面。
+/// 允许用户录入新的全局唤醒快捷键组合（必须包含至少一个修饰键）。
+/// 支持保存、测试、恢复默认（Ctrl+1）。
+/// </summary>
 public class HotkeyPage : UserControl
 {
     private readonly MainForm _mainForm;
-    private TextBox _txtHotkey = null!;
+    private TextBox _txtHotkey = null!;           // 快捷键显示/录入框
     private Button _btnTest = null!, _btnReset = null!, _btnSave = null!;
-    private Label _lblStatus = null!;
-    private int _pendingModifiers;
-    private int _pendingKey;
-    private bool _isRecording;
+    private Label _lblStatus = null!;             // 状态提示标签
+    private int _pendingModifiers;                // 待保存的修饰键
+    private int _pendingKey;                      // 待保存的主键
+    private bool _isRecording;                    // 是否正在录入快捷键
 
     public HotkeyPage(MainForm mainForm)
     {
@@ -141,6 +146,7 @@ public class HotkeyPage : UserControl
         _txtHotkey.Text = hotkey.DisplayText;
     }
 
+    /// <summary>点击输入框开始录入模式，背景变成黄色提示</summary>
     private void TxtHotkey_Click(object? sender, EventArgs e)
     {
         _isRecording = true;
@@ -149,6 +155,7 @@ public class HotkeyPage : UserControl
         _lblStatus.Text = "";
     }
 
+    /// <summary>录入模式下捕获键盘事件，识别修饰键+主键组合</summary>
     private void TxtHotkey_KeyDown(object? sender, KeyEventArgs e)
     {
         if (!_isRecording) return;
@@ -156,13 +163,13 @@ public class HotkeyPage : UserControl
         e.SuppressKeyPress = true;
         e.Handled = true;
 
-        // Must have at least one modifier
+        // 必须至少包含一个修饰键
         int modifiers = 0;
         if (e.Control) modifiers |= Native.Win32Api.MOD_CONTROL;
         if (e.Alt) modifiers |= Native.Win32Api.MOD_ALT;
         if (e.Shift) modifiers |= Native.Win32Api.MOD_SHIFT;
 
-        // Check if an actual key (not just modifier) was pressed
+        // 检查是否按下了实际按键（非单独修饰键）
         var key = e.KeyCode;
         if (key == Keys.ControlKey || key == Keys.ShiftKey || key == Keys.Menu || key == Keys.LWin || key == Keys.RWin)
             return;
@@ -183,6 +190,7 @@ public class HotkeyPage : UserControl
         _lblStatus.Text = "已录入快捷键，请点击保存按钮应用";
     }
 
+    /// <summary>失去焦点时取消录入，恢复原始显示</summary>
     private void TxtHotkey_LostFocus(object? sender, EventArgs e)
     {
         if (_isRecording)
@@ -193,6 +201,7 @@ public class HotkeyPage : UserControl
         }
     }
 
+    /// <summary>保存快捷键到配置并重新注册</summary>
     private void BtnSave_Click(object? sender, EventArgs e)
     {
         try
@@ -222,10 +231,11 @@ public class HotkeyPage : UserControl
         _lblStatus.Text = $"当前快捷键: {_mainForm.Config.WakeHotkey.DisplayText}，请按下此组合键测试";
     }
 
+    /// <summary>恢复默认快捷键 Ctrl+1</summary>
     private void BtnReset_Click(object? sender, EventArgs e)
     {
-        _pendingModifiers = 2; // MOD_CONTROL
-        _pendingKey = 0x31;    // '1'
+        _pendingModifiers = 2; // MOD_CONTROL 对应 Ctrl 键
+        _pendingKey = 0x31;    // 虚拟键码 '1'
         _txtHotkey.Text = "Ctrl+1";
         _lblStatus.ForeColor = ThemeService.ThemeColor;
         _lblStatus.Text = "已恢复默认快捷键 Ctrl+1，请点击保存应用";

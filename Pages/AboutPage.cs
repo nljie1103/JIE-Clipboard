@@ -3,6 +3,10 @@ using System.Diagnostics;
 
 namespace JIE剪切板.Pages;
 
+/// <summary>
+/// “关于”页面。
+/// 显示应用信息：名称、版本、描述、功能特性、技术栈、作者信息、官网/开源链接。
+/// </summary>
 public class AboutPage : UserControl
 {
     public AboutPage()
@@ -23,7 +27,7 @@ public class AboutPage : UserControl
             AutoScroll = true
         };
 
-        // App icon/name
+        // 应用名称
         var nameLabel = new Label
         {
             Text = "JIE 剪切板",
@@ -36,7 +40,7 @@ public class AboutPage : UserControl
 
         var versionLabel = new Label
         {
-            Text = "版本 2.0.1.2",
+            Text = "版本 3.0.0.2",
             Font = new Font(ThemeService.GlobalFont.FontFamily, 11f),
             ForeColor = ThemeService.SecondaryTextColor,
             AutoSize = true,
@@ -53,7 +57,7 @@ public class AboutPage : UserControl
             Margin = new Padding(0, 0, 0, DpiHelper.Scale(25))
         };
 
-        // Features
+        // 功能特性分组
         var featuresGroup = new GroupBox
         {
             Text = "功能特性",
@@ -78,7 +82,7 @@ public class AboutPage : UserControl
         };
         featuresGroup.Controls.Add(featuresLabel);
 
-        // Tech stack
+        // 技术栈分组
         var techGroup = new GroupBox
         {
             Text = "技术栈",
@@ -97,7 +101,7 @@ public class AboutPage : UserControl
         };
         techGroup.Controls.Add(techLabel);
 
-        // Author info
+        // 作者信息
         Font? iconFont = null;
         try { iconFont = new Font("Segoe MDL2 Assets", 12f); } catch { }
 
@@ -123,6 +127,7 @@ public class AboutPage : UserControl
         Controls.Add(layout);
     }
 
+    /// <summary>创建一行信息（图标 + 文本 + 可选超链接）</summary>
     private Panel CreateInfoRow(Font? iconFont, string iconChar, string text, string? linkText, string? url)
     {
         var panel = new FlowLayoutPanel

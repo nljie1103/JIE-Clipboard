@@ -3,6 +3,14 @@ using JIE剪切板.Services;
 
 namespace JIE剪切板.Pages;
 
+/// <summary>
+/// “安全防护”设置页面。
+/// 配置加密记录的默认安全策略（可在编辑记录时覆盖）：
+/// - 最大密码尝试次数
+/// - 基础锁定时长（指数退避策略：每次超限后锁定时间翻倍）
+/// - 超限自动删除（替代锁定）
+/// - 是否允许搜索加密内容
+/// </summary>
 public class SecurityPage : UserControl
 {
     private readonly MainForm _mainForm;
@@ -30,7 +38,7 @@ public class SecurityPage : UserControl
             WrapContents = false
         };
 
-        // Title
+        // 页面标题
         layout.Controls.Add(new Label
         {
             Text = "安全防护",
@@ -48,7 +56,7 @@ public class SecurityPage : UserControl
             Margin = new Padding(0, 0, 0, 15)
         });
 
-        // Max password attempts
+        // 最大密码尝试次数
         var attemptPanel = CreateSettingPanel("最大密码尝试次数：",
             "超过此次数后将触发锁定或删除操作");
         _numMaxAttempts = new NumericUpDown
@@ -66,7 +74,7 @@ public class SecurityPage : UserControl
         attemptRow.Controls.Add(attemptUnit);
         layout.Controls.Add(attemptPanel);
 
-        // Base lock duration
+        // 基础锁定时长
         var lockPanel = CreateSettingPanel("基础锁定时长：",
             "每次超过尝试次数后锁定时间翻倍（累计锁定次数越多，等待越久）");
         _numBaseLock = new NumericUpDown
@@ -84,7 +92,7 @@ public class SecurityPage : UserControl
         lockRow.Controls.Add(lockUnit);
         layout.Controls.Add(lockPanel);
 
-        // Lock formula explanation
+        // 锁定公式说明
         var formulaLabel = new Label
         {
             Text = "锁定公式: 实际锁定时长 = 基础锁定时长 × 2^(累计锁定次数-1)",
@@ -95,7 +103,7 @@ public class SecurityPage : UserControl
         };
         layout.Controls.Add(formulaLabel);
 
-        // Auto delete
+        // 超限自动删除开关
         var deletePanel = CreateSettingPanel("超限自动删除：",
             "启用后，超过最大尝试次数将直接删除加密记录（而不是锁定）");
         _swAutoDelete = new ToggleSwitch { Margin = new Padding(10, 0, 0, 0) };
@@ -104,7 +112,7 @@ public class SecurityPage : UserControl
         deleteRow.Controls.Add(_swAutoDelete);
         layout.Controls.Add(deletePanel);
 
-        // Warning for auto-delete
+        // 自动删除警告标签
         var warningLabel = new Label
         {
             Text = "⚠ 警告：启用自动删除后，超过尝试次数的加密记录将被永久删除，无法恢复！",
@@ -115,7 +123,7 @@ public class SecurityPage : UserControl
         };
         layout.Controls.Add(warningLabel);
 
-        // Encrypted search
+        // 加密搜索设置
         var searchPanel = CreateSettingPanel("允许搜索加密内容：",
             "关闭时，搜索只匹配\"加密内容\"关键字");
         _swSearchEncrypted = new ToggleSwitch { Margin = new Padding(DpiHelper.Scale(10), 0, 0, 0) };
@@ -137,6 +145,7 @@ public class SecurityPage : UserControl
         Controls.Add(layout);
     }
 
+    /// <summary>创建设置项容器（标题行 + 描述文本）</summary>
     private Panel CreateSettingPanel(string labelText, string descText)
     {
         var container = new Panel { AutoSize = true, Width = DpiHelper.Scale(600), Margin = new Padding(0, 0, 0, DpiHelper.Scale(5)) };
@@ -169,7 +178,7 @@ public class SecurityPage : UserControl
         };
         container.Controls.Add(desc);
 
-        // Adjust container height
+        // 调整容器高度
         container.Height = row.Height + desc.Height + 10;
 
         return container;
@@ -201,6 +210,7 @@ public class SecurityPage : UserControl
         }
     }
 
+    /// <summary>“允许搜索加密内容”开关变化：开启时显示安全警告确认框</summary>
     private void SwSearchEncrypted_Changed(object? sender, EventArgs e)
     {
         if (_swSearchEncrypted.Checked)

@@ -4,22 +4,42 @@ using JIE剪切板.Services;
 
 namespace JIE剪切板.Dialogs;
 
+/// <summary>
+/// 记录编辑对话框。
+/// 允许用户编辑剪贴板记录的：
+/// - 内容（文本类型可编辑，其他类型只读）
+/// - 过期时间
+/// - 最大复制次数
+/// - 加密/解密（含密码设置、提示文字）
+/// - 安全策略（最大尝试次数、锁定时长、自动删除）
+/// 
+/// 对于加密记录，支持解密后显示真实内容并编辑，保存时自动重新加密。
+/// </summary>
 public class EditRecordDialog : Form
 {
-    private readonly ClipboardRecord _record;
-    private readonly AppConfig _config;
-    private readonly string? _decryptedContent;
-    private readonly ClipboardContentType? _decryptedType;
-    private readonly string? _existingPassword;
+    private readonly ClipboardRecord _record;           // 正在编辑的记录引用
+    private readonly AppConfig _config;                 // 应用配置
+    private readonly string? _decryptedContent;         // 解密后的原始内容（加密记录时传入）
+    private readonly ClipboardContentType? _decryptedType; // 解密后的原始类型
+    private readonly string? _existingPassword;         // 已验证的密码（用于重新加密）
 
-    private TextBox _txtContent = null!;
-    private DateTimePicker _dtpExpire = null!;
+    // UI 控件
+    private TextBox _txtContent = null!;                // 内容编辑框
+    private DateTimePicker _dtpExpire = null!;          // 过期时间选择器
     private CheckBox _chkExpire = null!, _chkEncrypt = null!, _chkUseGlobal = null!;
     private NumericUpDown _numMaxCopy = null!, _numMaxAttempts = null!, _numBaseLock = null!;
-    private ToggleSwitch _swAutoDelete = null!;
+    private ToggleSwitch _swAutoDelete = null!;         // 超限自动删除开关
     private TextBox _txtPassword = null!, _txtPasswordConfirm = null!, _txtEncryptedHint = null!;
-    private Panel _encryptPanel = null!, _securityPanel = null!;
+    private Panel _encryptPanel = null!, _securityPanel = null!; // 加密和安全设置面板
 
+    /// <summary>
+    /// 构造函数。
+    /// </summary>
+    /// <param name="record">要编辑的记录</param>
+    /// <param name="config">应用配置</param>
+    /// <param name="decryptedContent">解密后的内容（可选）</param>
+    /// <param name="decryptedType">解密后的类型（可选）</param>
+    /// <param name="existingPassword">已验证的密码（可选，用于重新加密）</param>
     public EditRecordDialog(ClipboardRecord record, AppConfig config,
         string? decryptedContent = null, ClipboardContentType? decryptedType = null, string? existingPassword = null)
     {
@@ -33,6 +53,7 @@ public class EditRecordDialog : Form
         LoadRecord();
     }
 
+    /// <summary>初始化窗口属性（大小、标题、样式等）</summary>
     private void InitializeForm()
     {
         Text = "编辑记录";
@@ -49,11 +70,14 @@ public class EditRecordDialog : Form
         Font = ThemeService.GlobalFont;
     }
 
+    /// <summary>
+    /// 初始化所有 UI 控件：内容编辑、过期时间、复制次数、加密设置、安全策略、保存/取消按钮。
+    /// </summary>
     private void InitializeControls()
     {
         int y = 15;
 
-        // Content section
+        // 内容编辑区
         Controls.Add(CreateLabel("内容：", 15, y));
         y += 22;
 
@@ -70,7 +94,7 @@ public class EditRecordDialog : Form
         Controls.Add(_txtContent);
         y += 90;
 
-        // Expiration
+        // 过期时间设置
         _chkExpire = new CheckBox
         {
             Text = "设置过期时间",
@@ -93,7 +117,7 @@ public class EditRecordDialog : Form
         Controls.Add(_dtpExpire);
         y += 35;
 
-        // Max copy count
+        // 最大复制次数
         Controls.Add(CreateLabel("最大复制次数（0=不限）：", 15, y + 3));
         _numMaxCopy = new NumericUpDown
         {
@@ -106,12 +130,12 @@ public class EditRecordDialog : Form
         Controls.Add(_numMaxCopy);
         y += 35;
 
-        // Separator
+        // 分隔线
         var sep1 = new Panel { Location = new Point(15, y), Size = new Size(500, 1), BackColor = ThemeService.BorderColor };
         Controls.Add(sep1);
         y += 10;
 
-        // Encryption section
+        // 加密设置区
         _chkEncrypt = new CheckBox
         {
             Text = "加密此记录",
@@ -128,7 +152,7 @@ public class EditRecordDialog : Form
         Controls.Add(_chkEncrypt);
         y += 30;
 
-        // Encrypt panel (password inputs)
+        // 加密面板（密码输入、确认密码、提示文字）
         _encryptPanel = new Panel
         {
             Location = new Point(15, y),
@@ -173,7 +197,7 @@ public class EditRecordDialog : Form
         };
         _encryptPanel.Controls.Add(_txtEncryptedHint);
 
-        // Use global security checkbox
+        // 是否使用全局安全设置复选框
         _chkUseGlobal = new CheckBox
         {
             Text = "使用全局安全设置",
@@ -189,7 +213,7 @@ public class EditRecordDialog : Form
         Controls.Add(_encryptPanel);
         y += 128;
 
-        // Per-record security panel
+        // 单条记录独立安全策略面板
         _securityPanel = new Panel
         {
             Location = new Point(15, y),
@@ -226,7 +250,7 @@ public class EditRecordDialog : Form
         Controls.Add(_securityPanel);
         y += 130;
 
-        // Buttons
+        // 保存和取消按钮
         var btnSave = new Button
         {
             Text = "保存",
@@ -255,6 +279,7 @@ public class EditRecordDialog : Form
         CancelButton = btnCancel;
     }
 
+    /// <summary>创建统一样式的标签控件</summary>
     private Label CreateLabel(string text, int x, int y)
     {
         return new Label
@@ -266,9 +291,13 @@ public class EditRecordDialog : Form
         };
     }
 
+    /// <summary>
+    /// 加载记录数据到 UI 控件。
+    /// 对于加密记录，如果有解密内容则显示解密后的真实内容。
+    /// </summary>
     private void LoadRecord()
     {
-        // Content - for encrypted records with decrypted content, show the real content
+        // 加密记录且有解密内容时，显示解密后的真实内容
         if (_decryptedContent != null)
         {
             var effectiveType = _decryptedType ?? _record.ContentType;
@@ -294,17 +323,17 @@ public class EditRecordDialog : Form
             _txtContent.ReadOnly = true;
         }
 
-        // Expiration
+        // 过期时间
         if (_record.ExpireTime.HasValue)
         {
             _chkExpire.Checked = true;
             _dtpExpire.Value = _record.ExpireTime.Value.ToLocalTime();
         }
 
-        // Copy count
+        // 复制次数
         _numMaxCopy.Value = Math.Max(0, Math.Min(_numMaxCopy.Maximum, _record.MaxCopyCount));
 
-        // Encryption
+        // 加密状态
         _chkEncrypt.Checked = _record.IsEncrypted;
         _txtEncryptedHint.Text = _record.EncryptedHint ?? "";
         if (_record.IsEncrypted)
@@ -315,21 +344,25 @@ public class EditRecordDialog : Form
             _txtPasswordConfirm.Text = "••••••••";
         }
 
-        // Security settings
+        // 安全策略设置
         _chkUseGlobal.Checked = _record.UseGlobalSecuritySettings;
         _numMaxAttempts.Value = Math.Max(1, Math.Min(100, _record.MaxPasswordAttempts));
         _numBaseLock.Value = Math.Max(1, Math.Min(10080, _record.BaseLockMinutes));
         _swAutoDelete.Checked = _record.AutoDeleteOnExceed;
     }
 
+    /// <summary>
+    /// 保存按钮点击处理。
+    /// 处理复杂逻辑：内容更新、加密/解密切换、重新加密、安全策略更新。
+    /// </summary>
     private void BtnSave_Click(object? sender, EventArgs e)
     {
         try
         {
-            // Determine the effective content type for decrypted records
+            // 确定解密记录的实际内容类型
             var effectiveType = _decryptedType ?? _record.ContentType;
 
-            // Update content for text types
+            // 更新文本类型的内容
             if (effectiveType is ClipboardContentType.PlainText or ClipboardContentType.RichText)
             {
                 if (!_record.IsEncrypted)
@@ -339,14 +372,14 @@ public class EditRecordDialog : Form
                 }
                 else if (_decryptedContent != null && _txtContent.Text != _decryptedContent)
                 {
-                    // Content was edited while encrypted — need to re-encrypt with updated content
+                    // 加密状态下编辑了内容 —— 需要用新内容重新加密
                     var password = _existingPassword;
                     if (string.IsNullOrEmpty(password))
                     {
                         MessageBox.Show(this, "无法保存修改：缺少加密密码", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         return;
                     }
-                    // Temporarily restore unencrypted state to re-encrypt
+                    // 临时恢复未加密状态以便重新加密
                     _record.IsEncrypted = false;
                     _record.Content = _txtContent.Text;
                     _record.ContentType = effectiveType;
@@ -358,19 +391,20 @@ public class EditRecordDialog : Form
                 }
             }
 
-            // Update expiration
+            // 更新过期时间
             _record.ExpireTime = _chkExpire.Checked ? _dtpExpire.Value.ToUniversalTime() : null;
 
-            // Update copy count
+            // 更新最大复制次数
             _record.MaxCopyCount = (int)_numMaxCopy.Value;
 
-            // Update encrypted hint
-            _record.EncryptedHint = string.IsNullOrWhiteSpace(_txtEncryptedHint.Text) ? null : _txtEncryptedHint.Text.Trim();
+            // 更新加密提示文字
+            _record.EncryptedHint = string.IsNullOrWhiteSpace(_txtEncryptedHint.Text)
+                ? null : _txtEncryptedHint.Text.Trim();
 
-            // Handle encryption change
+            // 处理加密状态变更
             if (_chkEncrypt.Checked && !_record.IsEncrypted)
             {
-                // New encryption
+                // 新加密：验证密码并加密记录
                 if (string.IsNullOrEmpty(_txtPassword.Text))
                 {
                     MessageBox.Show(this, "请输入加密密码", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -395,7 +429,7 @@ public class EditRecordDialog : Form
             }
             else if (!_chkEncrypt.Checked && _record.IsEncrypted)
             {
-                // Request password to decrypt
+                // 请求密码以解密记录
                 using var pwDialog = new PasswordDialog();
                 if (pwDialog.ShowDialog(this) != DialogResult.OK) return;
 
@@ -420,7 +454,7 @@ public class EditRecordDialog : Form
                 _record.ContentHash = EncryptionService.ComputeContentHash(_record.Content);
             }
 
-            // Update security settings
+            // 更新安全策略设置
             _record.UseGlobalSecuritySettings = _chkUseGlobal.Checked;
             if (!_chkUseGlobal.Checked)
             {

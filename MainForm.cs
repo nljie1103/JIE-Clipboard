@@ -6,38 +6,53 @@ using JIE剪切板.Services;
 
 namespace JIE剪切板;
 
+/// <summary>
+/// 应用程序主窗口。
+/// 职责：
+///  1. 数据初始化（加载配置、记录、注册热键、启用剪贴板监听）
+///  2. UI 布局（左侧导航栏 + 右侧内容区 + 系统托盘图标）
+///  3. 剪贴板监听（WM_CLIPBOARDUPDATE + 看门狗 watchdog 定时重注册）
+///  4. 记录操作（复制粘贴、删除、节流保存、持久化加密存储）
+///  5. 窗口管理（贴入模式 pasteMode —— 不抢焦点；设置模式 —— 正常激活）
+///  6. 主题切换（销毁并重建所有 Pages）
+/// </summary>
 public class MainForm : Form
 {
-    // Data
+    // ==================== 数据 ====================
+    /// <summary>全局配置对象，由 FileService.LoadConfig() 加载</summary>
     public AppConfig Config { get; private set; } = null!;
+    /// <summary>所有剪贴板记录列表，由 FileService.LoadRecords() 加载（DPAPI 解密）</summary>
     public List<ClipboardRecord> Records { get; private set; } = null!;
 
-    // Services
-    private HotkeyService _hotkeyService = null!;
+    // ==================== 服务 ====================
+    private HotkeyService _hotkeyService = null!; // 全局热键注册/注销服务
 
-    // UI
-    private NavigationListBox _navList = null!;
-    private Panel _contentPanel = null!;
-    private NotifyIcon _trayIcon = null!;
-    private ContextMenuStrip _trayMenu = null!;
-    private SplitContainer _splitContainer = null!;
-    private Button _btnResetAll = null!;
+    // ==================== UI 控件 ====================
+    private NavigationListBox _navList = null!;    // 左侧导航列表
+    private Panel _contentPanel = null!;           // 右侧内容面板
+    private NotifyIcon _trayIcon = null!;          // 系统托盘图标
+    private ContextMenuStrip _trayMenu = null!;    // 托盘右键菜单
+    private SplitContainer _splitContainer = null!;// 左右分栏容器
+    private Button _btnResetAll = null!;           // "恢复所有默认设置"按钮
 
-    // Pages
-    private UserControl?[] _pages = new UserControl?[7];
-    private int _currentPageIndex = -1;
+    // ==================== 页面缓存 ====================
+    private UserControl?[] _pages = new UserControl?[7]; // 7 个页面的缓存数组
+    private int _currentPageIndex = -1;                  // 当前显示的页面索引
 
-    // State
-    private IntPtr _previousForegroundWindow;
-    private bool _isMonitoring;
-    private bool _isExiting;
-    private bool _pasteMode;
-    private System.Windows.Forms.Timer? _clipboardWatchdog;
-    private System.Windows.Forms.Timer? _saveThrottleTimer;
-    private bool _saveDataPending;
-    private DateTime _lastClipboardUpdate = DateTime.UtcNow;
+    // ==================== 运行时状态 ====================
+    private IntPtr _previousForegroundWindow;        // 唤醒前的前台窗口句柄（用于自动粘贴）
+    private bool _isMonitoring;                      // 是否正在监听剪贴板
+    private bool _isExiting;                         // 是否正在退出（防止关闭时再次隐藏）
+    private bool _pasteMode;                         // 贴入模式标记（不抢焦点，类似 Win+V）
+    private System.Windows.Forms.Timer? _clipboardWatchdog;  // 看门狗定时器（30s 检查监听是否中断）
+    private System.Windows.Forms.Timer? _saveThrottleTimer;  // 保存节流定时器（500ms 合并多次保存）
+    private bool _saveDataPending;                           // 是否有待写入的保存请求
+    private DateTime _lastClipboardUpdate = DateTime.UtcNow; // 上次收到剪贴板更新的时间（用于看门狗判断）
 
-    // Prevent window activation when in paste mode (like Win+V behavior)
+    /// <summary>
+    /// 贴入模式下阻止窗口被激活（ShowWithoutActivation = true），
+    /// 类似 Windows 内置 Win+V 行为，原应用保持键盘焦点。
+    /// </summary>
     protected override bool ShowWithoutActivation => _pasteMode;
 
     public MainForm()
@@ -50,6 +65,7 @@ public class MainForm : Form
 
     #region Initialization
 
+    /// <summary>初始化数据层：目录结构、日志、配置、记录、主题、热键服务</summary>
     private void InitializeData()
     {
         FileService.EnsureDirectories();
@@ -62,6 +78,7 @@ public class MainForm : Form
         _hotkeyService = new HotkeyService();
     }
 
+    /// <summary>初始化窗体属性：标题、大小、位置、外观</summary>
     private void InitializeForm()
     {
         Text = "JIE 剪切板";
@@ -78,6 +95,7 @@ public class MainForm : Form
         Font = ThemeService.GlobalFont;
     }
 
+    /// <summary>初始化 UI 布局：左侧导航 + 右侧内容区 + 恢复默认按钮</summary>
     private void InitializeUI()
     {
         _splitContainer = new SplitContainer
@@ -90,7 +108,7 @@ public class MainForm : Form
         _splitContainer.Panel1.BackColor = ThemeService.SidebarBackground;
         _splitContainer.Panel2.BackColor = ThemeService.WindowBackground;
 
-        // Navigation
+        // 导航栏控件
         _navList = new NavigationListBox
         {
             Dock = DockStyle.Fill,
@@ -98,7 +116,7 @@ public class MainForm : Form
         };
         _navList.SelectedIndexChanged += NavList_SelectedIndexChanged;
 
-        // Reset all defaults button
+        // “恢复所有默认设置”按钮（放在导航栏底部）
         _btnResetAll = new Button
         {
             Text = "恢复所有默认设置",
@@ -115,7 +133,7 @@ public class MainForm : Form
         _splitContainer.Panel1.Controls.Add(_navList);
         _splitContainer.Panel1.Controls.Add(_btnResetAll);
 
-        // Content panel
+        // 右侧内容面板
         _contentPanel = new Panel
         {
             Dock = DockStyle.Fill,
@@ -125,10 +143,11 @@ public class MainForm : Form
 
         Controls.Add(_splitContainer);
 
-        // Show first page
+        // 显示第一个页面（全部记录）
         SwitchPage(0);
     }
 
+    /// <summary>初始化系统托盘图标及右键菜单（显示/监听/退出）</summary>
     private void InitializeTrayIcon()
     {
         _trayMenu = new ContextMenuStrip();
@@ -153,7 +172,7 @@ public class MainForm : Form
             Visible = true
         };
 
-        // Load icon from embedded resource
+        // 从嵌入资源加载应用图标（优先 PNG，其次 ICO，最后用系统默认图标）
         try
         {
             var assembly = System.Reflection.Assembly.GetExecutingAssembly();
@@ -198,11 +217,19 @@ public class MainForm : Form
 
     #region Form Events
 
+    /// <summary>
+    /// 窗口首次加载：
+    /// 1. 设置分栏约束
+    /// 2. 注册剪贴板监听器（AddClipboardFormatListener）
+    /// 3. 注册全局唤醒热键
+    /// 4. 启动看门狗和保存节流定时器
+    /// 5. 清理过期记录和残留临时文件
+    /// </summary>
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
 
-        // Set splitter constraints after form has its real size
+        // 窗口已有实际大小后再设置分栏约束
         try
         {
             _splitContainer.Panel1MinSize = DpiHelper.Scale(140);
@@ -211,30 +238,38 @@ public class MainForm : Form
         }
         catch { }
 
-        // Register clipboard listener
+        // 注册系统剪贴板监听器（内容变化时收到 WM_CLIPBOARDUPDATE）
         Win32Api.AddClipboardFormatListener(Handle);
 
-        // Initialize hotkey service and register wake hotkey
+        // 初始化热键服务并注册唤醒快捷键
         _hotkeyService.Initialize(Handle);
         RegisterWakeHotkey();
 
-        // Always start monitoring on launch
+        // 启动时始终自动开启剪贴板监听
         _isMonitoring = true;
         UpdateMonitoringUI();
 
-        // Start clipboard watchdog timer to ensure monitoring stays active on Win11
-        _clipboardWatchdog = new System.Windows.Forms.Timer { Interval = 30000 }; // 30s
+        // 启动剪贴板看门狗定时器（每 30 秒检查监听器是否仍活跃，Win11 下可能丢失）
+        _clipboardWatchdog = new System.Windows.Forms.Timer { Interval = 30000 }; // 30秒
         _clipboardWatchdog.Tick += ClipboardWatchdog_Tick;
         _clipboardWatchdog.Start();
 
-        // Save throttle timer to batch rapid saves
+        // 保存节流定时器（500ms 合并多次快速保存请求，减少磁盘 I/O）
         _saveThrottleTimer = new System.Windows.Forms.Timer { Interval = 500 };
         _saveThrottleTimer.Tick += (_, _) => { _saveThrottleTimer.Stop(); FlushSaveData(); };
 
-        // Cleanup expired records
+        // 清理已过期的记录
         CleanupExpiredRecords();
+
+        // 清理上次崩溃残留的临时文件（崩溃恢复）
+        ClipboardService.CleanupStaleTempFiles();
     }
 
+    /// <summary>
+    /// 窗口关闭处理：
+    /// - 用户点 X → 隐藏到托盘而非真正退出
+    /// - 程序退出 → 刷新保存、注销监听、清理临时文件
+    /// </summary>
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         if (!_isExiting && e.CloseReason == CloseReason.UserClosing)
@@ -244,7 +279,7 @@ public class MainForm : Form
             return;
         }
 
-        // Cleanup
+        // 清理资源：保存数据、停止定时器、注销监听、准备退出
         FlushSaveData();
         _saveThrottleTimer?.Stop();
         _saveThrottleTimer?.Dispose();
@@ -257,20 +292,22 @@ public class MainForm : Form
 
         SaveData();
         FileService.CleanupOrphanedImages(Records);
+        ClipboardService.CleanupPendingTempFiles();
 
         base.OnFormClosing(e);
     }
 
+    /// <summary>失去焦点处理：设置模式下若开启 HideOnLostFocus 则自动隐藏；贴入模式不受影响</summary>
     protected override void OnDeactivate(EventArgs e)
     {
         base.OnDeactivate(e);
-        if (_pasteMode) return;
+        if (_pasteMode) return; // 贴入模式不隐藏
         if (Config.HideOnLostFocus && Visible && !_isExiting)
         {
             BeginInvoke(() =>
             {
                 if (!Visible || _isExiting) return;
-                // Don't hide if an owned dialog (edit/password) is active
+                // 如果当前有子对话框（编辑/密码框）活动，不隐藏主窗口
                 var active = Form.ActiveForm;
                 if (active != null && active != this) return;
                 Hide();
@@ -278,10 +315,15 @@ public class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// 消息循环处理：
+    /// - WM_MOUSEACTIVATE + 贴入模式 → 返回 MA_NOACTIVATE 不激活窗口
+    /// - WM_CLIPBOARDUPDATE → 触发剪贴板变化处理
+    /// - 热键消息 → 交给 HotkeyService 处理
+    /// </summary>
     protected override void WndProc(ref Message m)
     {
-        // In paste mode, prevent window activation on mouse click
-        // so the original app keeps keyboard focus (like Win+V)
+        // 贴入模式下点击窗口不激活，保持原应用键盘焦点
         if (m.Msg == Win32Api.WM_MOUSEACTIVATE && _pasteMode)
         {
             m.Result = (IntPtr)Win32Api.MA_NOACTIVATE;
@@ -304,11 +346,13 @@ public class MainForm : Form
 
     #region Navigation
 
+    /// <summary>导航列表选中项变化 → 切换页面</summary>
     private void NavList_SelectedIndexChanged(object? sender, int index)
     {
         SwitchPage(index);
     }
 
+    /// <summary>切换到指定索引的页面（懒加载 + 缓存）</summary>
     private void SwitchPage(int index)
     {
         if (index == _currentPageIndex) return;
@@ -323,7 +367,7 @@ public class MainForm : Form
             page.Dock = DockStyle.Fill;
             _contentPanel.Controls.Add(page);
 
-            // Refresh records page when switching to it
+            // 切换到“全部记录”页时自动刷新列表
             if (index == 0 && page is AllRecordsPage recordsPage)
                 recordsPage.RefreshRecords();
         }
@@ -331,6 +375,7 @@ public class MainForm : Form
         _contentPanel.ResumeLayout();
     }
 
+    /// <summary>按索引获取或创建页面实例（0=全部记录, 1=通用, 2=快捷键, 3=外观, 4=安全, 5=导入导出, 6=关于）</summary>
     private UserControl? GetOrCreatePage(int index)
     {
         if (_pages[index] != null) return _pages[index];
@@ -354,6 +399,17 @@ public class MainForm : Form
 
     #region Clipboard Monitoring
 
+    /// <summary>
+    /// 剪贴板内容变化回调（核心方法）。
+    /// 执行流程：
+    ///  1. 读取剪贴板内容 → ClipboardRecord
+    ///  2. 类型过滤（IsTypeAllowed）+ 后缀过滤（AreExtensionsAllowed）
+    ///  3. 大小限制检查
+    ///  4. 去重（相同 hash → 移到顶部）
+    ///  5. 持久化加密存储（ApplyPersistentStorage）
+    ///  6. 超量裁剪（移除最旧的非置顶记录）
+    ///  7. 保存 + 刷新页面
+    /// </summary>
     private void OnClipboardUpdate()
     {
         if (!_isMonitoring || ClipboardService.IsSelfWriting) return;
@@ -364,31 +420,31 @@ public class MainForm : Form
             var record = ClipboardService.ReadFromClipboard();
             if (record == null) return;
 
-            // Check record type filter
+            // 检查记录类型是否允许（用户可在设置中禁用某些类型）
             if (!IsTypeAllowed(record.ContentType)) return;
 
-            // Check extension filter for file-based types
+            // 检查后缀名过滤（仅对文件类型有效）
             if (record.ContentType is ClipboardContentType.FileDrop or ClipboardContentType.Video or ClipboardContentType.Folder)
             {
                 var paths = record.Content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
                 if (!AreExtensionsAllowed(paths)) return;
             }
 
-            // Check content size limit
+            // 检查单条内容大小是否超限
             if (Config.MaxContentSizeEnabled && !string.IsNullOrEmpty(record.Content))
             {
                 long sizeKB = System.Text.Encoding.UTF8.GetByteCount(record.Content) / 1024;
                 if (sizeKB > Config.MaxContentSizeKB) return;
             }
 
-            // Deduplication
+            // 去重处理：相同 hash 的记录不重复添加，而是移到顶部
             if (Config.EnableDuplicateRemoval && !string.IsNullOrEmpty(record.ContentHash))
             {
                 var existing = Records.FirstOrDefault(r =>
                     !r.IsEncrypted && r.ContentHash == record.ContentHash);
                 if (existing != null)
                 {
-                    // Move to top by updating time, reset copy count so it's usable again
+                    // 将已有记录移到顶部（更新时间），重置复制计数以便再次使用
                     existing.CreateTime = DateTime.UtcNow;
                     existing.CurrentCopyCount = 0;
                     SaveData();
@@ -399,13 +455,13 @@ public class MainForm : Form
 
             Records.Insert(0, record);
 
-            // Apply persistent encrypted storage per-type
+            // 按类型应用持久化加密存储（图片/文件/视频/文件夹）
             ApplyPersistentStorage(record);
 
-            // Enforce max record count
+            // 强制最大记录数限制
             if (Config.MaxRecordCountEnabled && Records.Count > Config.MaxRecordCount)
             {
-                // Remove oldest non-pinned records
+                // 移除最旧的非置顶记录
                 var toRemove = Records
                     .Where(r => !r.IsPinned)
                     .OrderBy(r => r.CreateTime)
@@ -427,11 +483,16 @@ public class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// 看门狗定时回调（每30秒）。
+    /// Win11 下剪贴板监听器可能被意外注销，超过60秒无更新则自动重新注册。
+    /// 同时定期清理过期记录。
+    /// </summary>
     private void ClipboardWatchdog_Tick(object? sender, EventArgs e)
     {
         try
         {
-            // Only re-register if no clipboard update received for >60s (may indicate dropped listener)
+            // 超过60秒没有收到剪贴板事件 → 可能监听器已失效，尝试重新注册
             if (_isMonitoring && IsHandleCreated && !_isExiting
                 && (DateTime.UtcNow - _lastClipboardUpdate).TotalSeconds > 60)
             {
@@ -440,7 +501,7 @@ public class MainForm : Form
                     LogService.Log("Clipboard watchdog: failed to re-register listener");
             }
 
-            // Periodically cleanup expired records
+            // 定期清理过期记录
             CleanupExpiredRecords();
         }
         catch (Exception ex)
@@ -453,18 +514,19 @@ public class MainForm : Form
 
     #region Record Operations
 
+    /// <summary>复制记录到剪贴板并自动粘贴到原应用</summary>
     public void CopyAndPasteRecord(ClipboardRecord record)
     {
         try
         {
-            // Update copy count
+            // 更新复制次数计数器
             record.CurrentCopyCount++;
             SaveData();
 
-            // Write to clipboard
+            // 写入系统剪贴板
             ClipboardService.WriteToClipboard(record);
 
-            // Hide and paste
+            // 隐藏窗口并自动粘贴
             HideAndPaste();
         }
         catch (Exception ex)
@@ -473,6 +535,12 @@ public class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// 隐藏窗口并向目标窗口发送 Ctrl+V。
+    /// - 贴入模式：原应用仍有焦点，直接发送 Ctrl+V
+    /// - 设置模式：先激活目标窗口再发送
+    /// async void 用于 await 延迟（无反订阅検异常，已用 try-catch 保护）
+    /// </summary>
     public async void HideAndPaste()
     {
         try
@@ -502,12 +570,14 @@ public class MainForm : Form
         }
     }
 
+    /// <summary>删除单条记录（清理关联文件 + 从列表移除）</summary>
     public void DeleteRecord(ClipboardRecord record)
     {
         FileService.DeleteRecordFiles(record);
         Records.Remove(record);
     }
 
+    /// <summary>清空所有记录</summary>
     public void ClearAllRecords()
     {
         foreach (var r in Records.ToList())
@@ -516,6 +586,7 @@ public class MainForm : Form
         SaveData();
     }
 
+    /// <summary>请求保存数据（节流式：500ms 内多次调用只刷盘一次）</summary>
     public void SaveData()
     {
         _saveDataPending = true;
@@ -523,6 +594,7 @@ public class MainForm : Form
             _saveThrottleTimer.Start();
     }
 
+    /// <summary>立即刷盘保存（节流定时器触发或程序退出时调用）</summary>
     private void FlushSaveData()
     {
         if (!_saveDataPending) return;
@@ -541,14 +613,21 @@ public class MainForm : Form
 
     #region Window Management
 
+    /// <summary>热键唤醒入口（默认贴入模式）</summary>
     private void ShowMainWindow()
     {
         ShowMainWindow(forPaste: true);
     }
 
+    /// <summary>
+    /// 显示主窗口。
+    /// - forPaste=true: 贴入模式，TopMost + ShowWithoutActivation，不抢焦点
+    /// - forPaste=false: 设置模式，正常激活窗口
+    /// - 若已可见则切换为隐藏（Toggle 行为）
+    /// </summary>
     private void ShowMainWindow(bool forPaste)
     {
-        // Toggle: if already visible, hide
+        // 切换行为：如果已显示则隐藏
         if (Visible && !_isExiting)
         {
             _pasteMode = false;
@@ -557,7 +636,7 @@ public class MainForm : Form
             return;
         }
 
-        // Save the current foreground window for auto-paste
+        // 保存当前前台窗口句柄，用于粘贴时切换回原应用
         _previousForegroundWindow = Win32Api.GetForegroundWindow();
 
         if (WindowState == FormWindowState.Minimized)
@@ -567,24 +646,25 @@ public class MainForm : Form
 
         if (forPaste)
         {
-            // Paste mode: show without stealing focus (like Win+V)
-            // Original app keeps keyboard focus, mouse can click records
+            // 贴入模式：显示窗口但不抢焦点（类似 Win+V 行为）
+            // 原应用保持键盘焦点，用户可用鼠标点击记录
             TopMost = true;
             Show();
         }
         else
         {
-            // Settings mode: normal window with full activation
+            // 设置模式：正常显示并完全激活窗口
             TopMost = false;
             Show();
             Activate();
             BringToFront();
         }
 
-        // Refresh records page
+        // 刷新记录页面
         RefreshCurrentPage();
     }
 
+    /// <summary>刷新当前页面（仅当 AllRecordsPage 已创建时）</summary>
     public void RefreshCurrentPage()
     {
         if (_currentPageIndex == 0 && _pages[0] is AllRecordsPage recordsPage)
@@ -598,6 +678,7 @@ public class MainForm : Form
 
     #region Hotkey
 
+    /// <summary>注册全局唤醒热键（来自配置的 Modifiers+Key）</summary>
     private void RegisterWakeHotkey()
     {
         var hotkey = Config.WakeHotkey;
@@ -611,6 +692,7 @@ public class MainForm : Form
             LogService.Log($"Failed to register wake hotkey: {hotkey.DisplayText}");
     }
 
+    /// <summary>重新注册热键（用户修改快捷键后调用）</summary>
     public void ReregisterHotkey()
     {
         _hotkeyService.UnregisterHotkey(HotkeyService.HOTKEY_WAKE);
@@ -621,12 +703,14 @@ public class MainForm : Form
 
     #region Monitoring
 
+    /// <summary>切换剪贴板监听状态</summary>
     private void ToggleMonitoring()
     {
         _isMonitoring = !_isMonitoring;
         UpdateMonitoringUI();
     }
 
+    /// <summary>同步托盘菜单勾选状态和 Tooltip 文本</summary>
     private void UpdateMonitoringUI()
     {
         if (_trayMenu.Items.Count > 1 && _trayMenu.Items[1] is ToolStripMenuItem menuItem)
@@ -640,6 +724,11 @@ public class MainForm : Form
 
     #region Theme
 
+    /// <summary>
+    /// 应用主题更改。
+    /// 步骤：更新窗口背景色 → 删除所有缓存页面 → 重建当前页面。
+    /// 粗暴但可靠，确保所有控件重新应用新主题色。
+    /// </summary>
     public void ApplyTheme()
     {
         try
@@ -652,7 +741,7 @@ public class MainForm : Form
             _navList.BackColor = ThemeService.SidebarBackground;
             _navList.Invalidate();
 
-            // Recreate pages to apply theme
+            // 重建所有页面以应用新主题
             for (int i = 0; i < _pages.Length; i++)
             {
                 if (_pages[i] != null)
@@ -662,7 +751,7 @@ public class MainForm : Form
                 }
             }
 
-            // Recreate current page
+            // 重新创建当前页面
             var pageIndex = _currentPageIndex;
             _currentPageIndex = -1;
             SwitchPage(pageIndex);
@@ -677,6 +766,7 @@ public class MainForm : Form
 
     #region Import / Reset
 
+    /// <summary>导入配置后应用：替换配置 + 保存 + 重新初始化主题和热键</summary>
     public void ApplyImportedConfig(AppConfig importedConfig)
     {
         Config = importedConfig;
@@ -686,6 +776,7 @@ public class MainForm : Form
         ReregisterHotkey();
     }
 
+    /// <summary>恢复所有默认设置（不删除记录）</summary>
     private void BtnResetAll_Click(object? sender, EventArgs e)
     {
         var result = MessageBox.Show(this,
@@ -709,6 +800,7 @@ public class MainForm : Form
 
     #region Cleanup
 
+    /// <summary>清理已过期且未置顶的记录</summary>
     private void CleanupExpiredRecords()
     {
         try
@@ -736,6 +828,7 @@ public class MainForm : Form
 
     #region Record Type Filtering
 
+    /// <summary>检查指定类型是否允许记录（根据配置中的 6 个开关）</summary>
     private bool IsTypeAllowed(ClipboardContentType type) => type switch
     {
         ClipboardContentType.PlainText => Config.RecordPlainText,
@@ -747,6 +840,11 @@ public class MainForm : Form
         _ => true
     };
 
+    /// <summary>
+    /// 检查文件后缀是否允许：
+    /// - 包含列表非空 → 至少一个文件匹配才允许
+    /// - 排除列表非空 → 所有文件都匹配排除列表才拒绝
+    /// </summary>
     private bool AreExtensionsAllowed(string[] paths)
     {
         var include = ParseExtensions(Config.IncludeExtensions);
@@ -759,6 +857,7 @@ public class MainForm : Form
         return true;
     }
 
+    /// <summary>解析逗号分隔的后缀列表字符串为 HashSet，自动补全前导点</summary>
     private static HashSet<string> ParseExtensions(string ext)
     {
         if (string.IsNullOrWhiteSpace(ext)) return new();
@@ -771,6 +870,12 @@ public class MainForm : Form
 
     #region Persistent Encrypted Storage
 
+    /// <summary>
+    /// 根据记录类型应用持久化加密存储：
+    /// - Image → DPAPI 加密图片文件（.enc）
+    /// - Video/FileDrop → 复制+DPAPI 加密（受单文件大小限制）
+    /// - Folder → zip压缩+DPAPI 加密（.zip.enc）
+    /// </summary>
     private void ApplyPersistentStorage(ClipboardRecord record)
     {
         try
@@ -830,6 +935,7 @@ public class MainForm : Form
         }
     }
 
+    /// <summary>对文件拖放路径逐个复制并加密（超过大小限制的保留原路径）</summary>
     private void EncryptFileDropPaths(ClipboardRecord record, long maxBytes)
     {
         var paths = record.Content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -860,6 +966,7 @@ public class MainForm : Form
 
     #endregion
 
+    /// <summary>完全退出应用（设置 _isExiting 以跳过“隐藏”逻辑）</summary>
     private void ExitApplication()
     {
         _isExiting = true;

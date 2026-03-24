@@ -2,11 +2,18 @@ using JIE剪切板.Services;
 
 namespace JIE剪切板.Dialogs;
 
+/// <summary>
+/// 密码输入对话框。
+/// 用于解密加密记录或导入加密备份文件时提示用户输入密码。
+/// 支持显示/隐藏密码切换，回车确认、ESC 取消。
+/// </summary>
 public class PasswordDialog : Form
 {
     private TextBox _txtPassword = null!;
     private Button _btnOk = null!, _btnCancel = null!;
     private CheckBox _chkShow = null!;
+
+    /// <summary>用户输入的密码（确认后读取）</summary>
     public string Password => _txtPassword.Text;
 
     public PasswordDialog()
@@ -90,6 +97,7 @@ public class PasswordDialog : Form
         Controls.AddRange(new Control[] { lblPrompt, _txtPassword, _chkShow, _btnOk, _btnCancel });
     }
 
+    /// <summary>窗口显示后自动聚焦密码输入框</summary>
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);

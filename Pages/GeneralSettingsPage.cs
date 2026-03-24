@@ -5,21 +5,33 @@ using System.Diagnostics;
 
 namespace JIE剪切板.Pages;
 
+/// <summary>
+/// “通用设置”页面。
+/// 包含以下设置分区：
+/// - 存储限制：最大记录数、单条最大大小、内容去重
+/// - 系统：开机自启动、自动监听、失焦隐藏
+/// - 记录类型：按类型过滤、后缀名包含/排除
+/// - 记录方式：按类型开启持久化加密存储
+/// - 数据存储：自定义存储位置、数据迁移
+/// </summary>
 public class GeneralSettingsPage : UserControl
 {
     private readonly MainForm _mainForm;
+
+    // 存储限制控件
     private ToggleSwitch _swMaxCount = null!, _swMaxSize = null!, _swDedup = null!;
+    // 系统设置控件
     private ToggleSwitch _swAutoStart = null!, _swAutoMonitor = null!, _swHideOnLostFocus = null!;
     private NumericUpDown _numMaxCount = null!, _numMaxSize = null!;
     private ComboBox _cboSizeUnit = null!;
     private Label _dataPathLabel = null!;
 
-    // Record type filtering
+    // 记录类型过滤控件
     private CheckBox _chkPlainText = null!, _chkRichText = null!, _chkImage = null!,
                      _chkFileDrop = null!, _chkVideo = null!, _chkFolder = null!;
     private TextBox _txtIncludeExt = null!, _txtExcludeExt = null!;
 
-    // Record storage mode (per-type)
+    // 持久化加密存储控件（按类型）
     private CheckBox _chkPersistImage = null!, _chkPersistFile = null!,
                      _chkPersistVideo = null!, _chkPersistFolder = null!;
     private NumericUpDown _numMaxPersistSize = null!;
@@ -35,6 +47,7 @@ public class GeneralSettingsPage : UserControl
         LoadSettings();
     }
 
+    /// <summary>初始化所有设置控件，使用 TableLayoutPanel 布局</summary>
     private void InitializeControls()
     {
         var layout = new TableLayoutPanel
@@ -50,16 +63,16 @@ public class GeneralSettingsPage : UserControl
 
         int row = 0;
 
-        // Section: Storage limits
+        // 分区：存储限制
         AddSectionHeader(layout, "存储限制", ref row);
 
-        // Max record count
+        // 最大记录数
         _swMaxCount = new ToggleSwitch();
                 _numMaxCount = new NumericUpDown { Minimum = 1, Maximum = 100000, Value = 1000, Width = DpiHelper.Scale(120) };
         _swMaxCount.CheckedChanged += (_, _) => { _numMaxCount.Enabled = _swMaxCount.Checked; SaveSettings(); };
         AddSettingRow(layout, "限制最大记录数", _swMaxCount, _numMaxCount, ref row);
 
-        // Max content size
+        // 单条最大大小限制
         _swMaxSize = new ToggleSwitch();
         var sizePanel = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, WrapContents = false };
         _numMaxSize = new NumericUpDown { Minimum = 1, Maximum = 999999, Value = 100, Width = DpiHelper.Scale(100) };
@@ -70,33 +83,33 @@ public class GeneralSettingsPage : UserControl
         _swMaxSize.CheckedChanged += (_, _) => { _numMaxSize.Enabled = _swMaxSize.Checked; _cboSizeUnit.Enabled = _swMaxSize.Checked; SaveSettings(); };
         AddSettingRow(layout, "限制单条最大大小", _swMaxSize, sizePanel, ref row);
 
-        // Dedup
+        // 去重开关
         _swDedup = new ToggleSwitch();
         _swDedup.CheckedChanged += (_, _) => SaveSettings();
         AddSettingRow(layout, "内容去重", _swDedup, new Label { Text = "自动去除重复的剪贴板内容", AutoSize = true, ForeColor = ThemeService.SecondaryTextColor }, ref row);
 
-        // Section: System
+        // 分区：系统设置
         AddSectionHeader(layout, "系统", ref row);
 
-        // Auto start
+        // 开机自启动
         _swAutoStart = new ToggleSwitch();
         _swAutoStart.CheckedChanged += (_, _) => { UpdateAutoStart(); SaveSettings(); };
         AddSettingRow(layout, "开机自启动", _swAutoStart, null, ref row);
 
-        // Auto monitor
+        // 启动时自动监听
         _swAutoMonitor = new ToggleSwitch();
         _swAutoMonitor.CheckedChanged += (_, _) => SaveSettings();
         AddSettingRow(layout, "启动时自动监听", _swAutoMonitor, null, ref row);
 
-        // Hide on lost focus
+        // 失焦自动隐藏
         _swHideOnLostFocus = new ToggleSwitch();
         _swHideOnLostFocus.CheckedChanged += (_, _) => SaveSettings();
         AddSettingRow(layout, "失焦自动隐藏", _swHideOnLostFocus, new Label { Text = "窗口失去焦点时自动隐藏到托盘", AutoSize = true, ForeColor = ThemeService.SecondaryTextColor }, ref row);
 
-        // Section: Record types
+        // 分区：记录类型过滤
         AddSectionHeader(layout, "记录类型", ref row);
 
-        // Type checkboxes
+        // 类型复选框（纯文本、富文本、图片、文件、视频、文件夹）
         layout.RowCount = row + 1;
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiHelper.Scale(40)));
         var typeLbl = new Label
@@ -132,7 +145,7 @@ public class GeneralSettingsPage : UserControl
         layout.SetColumnSpan(typeFlow, 2);
         row++;
 
-        // Include extensions
+        // 仅记录指定后缀名的文件
         layout.RowCount = row + 1;
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiHelper.Scale(40)));
         var inclLbl = new Label
@@ -169,7 +182,7 @@ public class GeneralSettingsPage : UserControl
         layout.SetColumnSpan(inclPanel, 2);
         row++;
 
-        // Exclude extensions
+        // 排除指定后缀名的文件
         layout.RowCount = row + 1;
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiHelper.Scale(40)));
         var exclLbl = new Label
@@ -206,10 +219,10 @@ public class GeneralSettingsPage : UserControl
         layout.SetColumnSpan(exclPanel, 2);
         row++;
 
-        // Section: Record storage mode
+        // 分区：记录方式（持久化加密存储）
         AddSectionHeader(layout, "记录方式", ref row);
 
-        // Explanation label
+        // 说明文本
         layout.RowCount = row + 1;
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         var persistExplain = new Label
@@ -232,7 +245,7 @@ public class GeneralSettingsPage : UserControl
         layout.SetColumnSpan(persistExplain, 3);
         row++;
 
-        // Per-type persistent checkboxes
+        // 按类型开启持久化加密的复选框
         layout.RowCount = row + 1;
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiHelper.Scale(40)));
         var persistTypeLbl = new Label
@@ -270,7 +283,7 @@ public class GeneralSettingsPage : UserControl
         layout.SetColumnSpan(persistTypeFlow, 2);
         row++;
 
-        // Warning
+        // 警告标签：持久化加密会增加存储空间占用
         layout.RowCount = row + 1;
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiHelper.Scale(55)));
         var persistWarn = new Label
@@ -287,7 +300,7 @@ public class GeneralSettingsPage : UserControl
         layout.SetColumnSpan(persistWarn, 3);
         row++;
 
-        // Max persist file size
+        // 最大持久化文件大小限制
         layout.RowCount = row + 1;
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiHelper.Scale(40)));
         var persistSizeLbl = new Label
@@ -317,10 +330,10 @@ public class GeneralSettingsPage : UserControl
         layout.SetColumnSpan(persistSizePanel, 2);
         row++;
 
-        // Section: Data storage
+        // 分区：数据存储位置
         AddSectionHeader(layout, "数据存储", ref row);
 
-        // Data path row
+        // 数据存储路径行
         layout.RowCount = row + 1;
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, DpiHelper.Scale(40)));
         var pathTitleLabel = new Label
@@ -394,6 +407,7 @@ public class GeneralSettingsPage : UserControl
         Controls.Add(layout);
     }
 
+    /// <summary>添加分区标题（加粗、跨列）</summary>
     private void AddSectionHeader(TableLayoutPanel layout, string text, ref int row)
     {
         layout.RowCount = row + 1;
@@ -412,6 +426,7 @@ public class GeneralSettingsPage : UserControl
         row++;
     }
 
+    /// <summary>添加一行设置项：标签 + 开关 + 可选额外控件</summary>
     private void AddSettingRow(TableLayoutPanel layout, string label, ToggleSwitch toggle, Control? extra, ref int row)
     {
         layout.RowCount = row + 1;
@@ -439,6 +454,7 @@ public class GeneralSettingsPage : UserControl
         row++;
     }
 
+    /// <summary>从 AppConfig 加载设置到 UI 控件</summary>
     private void LoadSettings()
     {
         var config = _mainForm.Config;
@@ -463,7 +479,7 @@ public class GeneralSettingsPage : UserControl
         _swAutoMonitor.Checked = config.AutoStartMonitoring;
         _swHideOnLostFocus.Checked = config.HideOnLostFocus;
 
-        // Record type filtering
+        // 记录类型过滤设置
         _chkPlainText.Checked = config.RecordPlainText;
         _chkRichText.Checked = config.RecordRichText;
         _chkImage.Checked = config.RecordImage;
@@ -473,7 +489,7 @@ public class GeneralSettingsPage : UserControl
         _txtIncludeExt.Text = config.IncludeExtensions;
         _txtExcludeExt.Text = config.ExcludeExtensions;
 
-        // Record storage mode (per-type)
+        // 持久化加密存储设置（按类型）
         _chkPersistImage.Checked = config.PersistImage;
         _chkPersistFile.Checked = config.PersistFileDrop;
         _chkPersistVideo.Checked = config.PersistVideo;
@@ -482,6 +498,7 @@ public class GeneralSettingsPage : UserControl
         _numMaxPersistSize.Enabled = config.PersistImage || config.PersistFileDrop || config.PersistVideo || config.PersistFolder;
     }
 
+    /// <summary>将 UI 控件的值保存回 AppConfig 并写入磁盘</summary>
     private void SaveSettings()
     {
         try
@@ -505,7 +522,7 @@ public class GeneralSettingsPage : UserControl
             config.AutoStartMonitoring = _swAutoMonitor.Checked;
             config.HideOnLostFocus = _swHideOnLostFocus.Checked;
 
-            // Record type filtering
+            // 记录类型过滤设置
             config.RecordPlainText = _chkPlainText.Checked;
             config.RecordRichText = _chkRichText.Checked;
             config.RecordImage = _chkImage.Checked;
@@ -515,7 +532,7 @@ public class GeneralSettingsPage : UserControl
             config.IncludeExtensions = _txtIncludeExt.Text.Trim();
             config.ExcludeExtensions = _txtExcludeExt.Text.Trim();
 
-            // Record storage mode (per-type)
+            // 持久化加密存储设置（按类型）
             config.PersistImage = _chkPersistImage.Checked;
             config.PersistFileDrop = _chkPersistFile.Checked;
             config.PersistVideo = _chkPersistVideo.Checked;
@@ -530,6 +547,7 @@ public class GeneralSettingsPage : UserControl
         }
     }
 
+    /// <summary>更新 Windows 开机自启动注册表项</summary>
     private void UpdateAutoStart()
     {
         try
@@ -550,6 +568,7 @@ public class GeneralSettingsPage : UserControl
         }
     }
 
+    /// <summary>更改数据存储位置，可选择是否迁移已有数据</summary>
     private void BtnChangePath_Click(object? sender, EventArgs e)
     {
         using var dialog = new FolderBrowserDialog
@@ -590,7 +609,7 @@ public class GeneralSettingsPage : UserControl
         FileService.SaveConfig(_mainForm.Config);
         _dataPathLabel.Text = FileService.DataFolder;
 
-        // Reload records from new location
+        // 从新位置重新加载记录
         _mainForm.Records.Clear();
         _mainForm.Records.AddRange(FileService.LoadRecords());
         _mainForm.RefreshCurrentPage();
@@ -598,6 +617,7 @@ public class GeneralSettingsPage : UserControl
         MessageBox.Show(this, "数据存储位置已更改。", "完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
+    /// <summary>恢复默认存储位置</summary>
     private void BtnResetPath_Click(object? sender, EventArgs e)
     {
         if (string.IsNullOrEmpty(_mainForm.Config.CustomDataFolder))
@@ -616,7 +636,7 @@ public class GeneralSettingsPage : UserControl
         FileService.SaveConfig(_mainForm.Config);
         _dataPathLabel.Text = FileService.DataFolder;
 
-        // Reload records from default location
+        // 从默认位置重新加载记录
         _mainForm.Records.Clear();
         _mainForm.Records.AddRange(FileService.LoadRecords());
         _mainForm.RefreshCurrentPage();

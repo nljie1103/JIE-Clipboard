@@ -3,6 +3,13 @@ using JIE剪切板.Services;
 
 namespace JIE剪切板.Pages;
 
+/// <summary>
+/// “导出导入”页面。
+/// 支持：
+/// - 导出：选择导出记录/配置，可选加密保护（JIEEXP 格式）
+/// - 导入：合并模式（保留现有+添加新的）或覆盖模式（替换所有）
+/// 加密的记录以密文形式导出，导入后仍需密码解密。
+/// </summary>
 public class ExportImportPage : UserControl
 {
     private readonly MainForm _mainForm;
@@ -29,7 +36,7 @@ public class ExportImportPage : UserControl
             WrapContents = false
         };
 
-        // Title
+        // 页面标题
         layout.Controls.Add(new Label
         {
             Text = "导出导入",
@@ -47,7 +54,7 @@ public class ExportImportPage : UserControl
             Margin = new Padding(0, 0, 0, 20)
         });
 
-        // Export section
+        // 导出分区
         var exportGroup = new GroupBox
         {
             Text = "导出",
@@ -121,7 +128,7 @@ public class ExportImportPage : UserControl
         exportGroup.Controls.AddRange(new Control[] { _chkExportRecords, _chkExportConfig, _chkExportEncrypt, _txtExportPassword, exportNote, btnExport });
         layout.Controls.Add(exportGroup);
 
-        // Import section
+        // 导入分区
         var importGroup = new GroupBox
         {
             Text = "导入",
@@ -167,7 +174,7 @@ public class ExportImportPage : UserControl
         importGroup.Controls.AddRange(new Control[] { importDesc, btnImportMerge, btnImportOverwrite });
         layout.Controls.Add(importGroup);
 
-        // Status
+        // 状态提示标签
         _lblStatus = new Label
         {
             Text = "",
@@ -180,6 +187,7 @@ public class ExportImportPage : UserControl
         Controls.Add(layout);
     }
 
+    /// <summary>导出按钮点击：验证选项、选择文件位置、执行导出</summary>
     private void BtnExport_Click(object? sender, EventArgs e)
     {
         try
@@ -231,6 +239,8 @@ public class ExportImportPage : UserControl
         }
     }
 
+    /// <summary>执行导入操作（合并或覆盖）</summary>
+    /// <param name="overwrite">true=覆盖现有数据，false=合并（跳过重复 ID）</param>
     private void DoImport(bool overwrite)
     {
         try
@@ -272,7 +282,7 @@ public class ExportImportPage : UserControl
                 }
                 else
                 {
-                    // Merge: skip duplicates by ID
+                    // 合并：按 ID 跳过重复记录
                     var existingIds = _mainForm.Records.Select(r => r.Id).ToHashSet();
                     foreach (var record in records)
                     {
@@ -309,6 +319,7 @@ public class ExportImportPage : UserControl
         }
     }
 
+    /// <summary>更新状态提示标签</summary>
     private void SetStatus(string message, Color color)
     {
         _lblStatus.Text = message;

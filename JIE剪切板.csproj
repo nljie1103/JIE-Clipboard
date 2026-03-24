@@ -1,63 +1,129 @@
+<!--
+  JIE剪切板 项目文件（.csproj）
+  ==============================
+  此文件是 MSBuild 构建系统的核心配置文件，定义了项目的编译选项、依赖项和资源。
+  使用 .NET SDK 风格的项目格式（简化格式），由 MSBuild 自动处理大量默认行为。
+-->
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    ==================== 基本项目属性 ====================
+    定义项目的目标框架、语言版本、程序集信息和发布方式。
+  -->
   <PropertyGroup>
+    <!-- 输出类型：WinExe 表示 Windows GUI 应用程序（运行时不显示控制台窗口） -->
     <OutputType>WinExe</OutputType>
+    <!-- 目标框架：.NET 8.0 LTS（长期支持版本），带 -windows 后缀表示仅限 Windows 平台 -->
     <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- C# 语言版本：12.0，支持主构造函数、集合表达式等新语法 -->
     <LangVersion>12.0</LangVersion>
+    <!-- 启用可空引用类型检查，编译器会对可能为 null 的引用发出警告 -->
     <Nullable>enable</Nullable>
+    <!-- 启用隐式全局 using，自动导入常用命名空间（如 System、System.Linq 等） -->
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- 启用 Windows Forms 框架支持（WinForms GUI 库） -->
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- 程序集名称（生成的 DLL/EXE 文件名） -->
     <AssemblyName>JIE剪切板</AssemblyName>
+    <!-- 根命名空间（代码文件中 namespace 的默认前缀） -->
     <RootNamespace>JIE剪切板</RootNamespace>
-    <AssemblyVersion>2.0.1.2</AssemblyVersion>
-    <FileVersion>2.0.1.2</FileVersion>
+    <!-- 程序集版本号：主版本.次版本.修订.构建 -->
+    <AssemblyVersion>3.0.0.2</AssemblyVersion>
+    <!-- 文件版本号（显示在文件属性"详细信息"中） -->
+    <FileVersion>3.0.0.2</FileVersion>
+    <!-- 产品名称 -->
     <Product>JIE剪切板</Product>
+    <!-- 公司/作者名称 -->
     <Company>牛连杰</Company>
+    <!-- 版权声明 -->
     <Copyright>Copyright © 2026 JIE剪切板</Copyright>
+    <!-- 程序描述（显示在文件属性和 NuGet 包信息中） -->
     <Description>Windows剪贴板历史记录管理工具</Description>
 
+    <!-- ===== 单文件发布配置 ===== -->
+    <!-- 发布为单个 EXE 文件，所有依赖的 DLL 会被打包进去 -->
     <PublishSingleFile>true</PublishSingleFile>
+    <!-- 自包含部署：将 .NET 运行时一起打包，用户无需安装 .NET -->
     <SelfContained>true</SelfContained>
+    <!-- 运行时标识符：目标平台为 Windows x64（64位） -->
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- 将原生库（如 C++ 运行时）也包含在单文件中，运行时自解压 -->
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- 启用单文件内的压缩，减小发布体积 -->
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
 
+    <!-- ===== 输出路径简化 ===== -->
+    <!-- 不在输出路径中追加目标框架名（如 net8.0-windows），简化输出目录结构 -->
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- 不在输出路径中追加运行时标识符（如 win-x64） -->
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
 
+    <!-- ===== 性能与调试 ===== -->
+    <!-- 将 PDB 调试信息嵌入 DLL/EXE 中，无需单独的 .pdb 文件 -->
     <DebugType>embedded</DebugType>
+    <!-- 启用分层编译：首次运行用快速编译，热点方法后续用优化编译，提升启动速度 -->
     <TieredCompilation>true</TieredCompilation>
+    <!-- 启用 Profile-Guided Optimization：根据实际运行情况优化热点代码 -->
     <TieredPGO>true</TieredPGO>
+    <!-- 抑制 IL2026 裁剪警告（单文件发布时的反射相关警告） -->
     <NoWarn>IL2026</NoWarn>
+    <!-- 应用程序图标（显示在 EXE 文件和任务栏上） -->
     <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <!--
+    ==================== Release 发布配置 ====================
+    dotnet build -c Release 或 dotnet publish 时生效。
+  -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <!-- 启用编译器优化（内联、死代码消除等），提升运行性能 -->
     <Optimize>true</Optimize>
   </PropertyGroup>
 
+  <!--
+    ==================== Debug 调试配置 ====================
+    dotnet build -c Debug（默认）时生效。
+  -->
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <!-- 定义 DEBUG 和 TRACE 编译符号，用于 #if DEBUG 条件编译等 -->
     <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <!-- 关闭优化，方便断点调试和变量查看 -->
     <Optimize>false</Optimize>
   </PropertyGroup>
 
+  <!--
+    ==================== NuGet 包依赖 ====================
+    第三方库引用，通过 NuGet 包管理器自动下载和管理。
+  -->
   <ItemGroup>
+    <!-- DPAPI（Windows 数据保护 API）的 .NET 封装，用于 records.dat 的加密存储 -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
+  <!--
+    ==================== 全局 Using 声明 ====================
+    这些命名空间会在所有 .cs 文件中自动导入，无需在每个文件中手动 using。
+    （ImplicitUsings=enable 已自动包含大部分，这里显式声明确保完整性）
+  -->
   <ItemGroup>
-    <Using Include="System" />
-    <Using Include="System.Collections.Generic" />
-    <Using Include="System.IO" />
-    <Using Include="System.Linq" />
-    <Using Include="System.Text" />
-    <Using Include="System.Threading.Tasks" />
-    <Using Include="System.Windows.Forms" />
-    <Using Include="System.Drawing" />
+    <Using Include="System" />                    <!-- 基础类型：String, Int32, DateTime 等 -->
+    <Using Include="System.Collections.Generic" /> <!-- 泛型集合：List, Dictionary 等 -->
+    <Using Include="System.IO" />                  <!-- 文件/流操作：File, Path, Stream 等 -->
+    <Using Include="System.Linq" />                <!-- LINQ 查询扩展方法：Where, Select 等 -->
+    <Using Include="System.Text" />                <!-- 字符串处理：StringBuilder, Encoding 等 -->
+    <Using Include="System.Threading.Tasks" />     <!-- 异步编程：Task, async/await 等 -->
+    <Using Include="System.Windows.Forms" />       <!-- WinForms UI 框架：Form, Button, TextBox 等 -->
+    <Using Include="System.Drawing" />             <!-- 图形绘制：Graphics, Color, Font, Bitmap 等 -->
   </ItemGroup>
 
+  <!--
+    ==================== 嵌入式资源 ====================
+    这些资源文件会被编译嵌入到 EXE/DLL 中，程序运行时通过资源名称加载。
+  -->
   <ItemGroup>
+    <!-- 应用程序图标（.ico 格式，用于 EXE 文件图标和任务栏显示） -->
     <EmbeddedResource Include="icon.ico" LogicalName="icon.ico" />
+    <!-- 应用程序图标的 PNG 版本（用于窗口标题栏和通知区域） -->
     <EmbeddedResource Include="icon.png" LogicalName="icon.png" />
   </ItemGroup>
 

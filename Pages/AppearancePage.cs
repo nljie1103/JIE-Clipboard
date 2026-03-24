@@ -2,14 +2,21 @@ using JIE剪切板.Services;
 
 namespace JIE剪切板.Pages;
 
+/// <summary>
+/// “外观”设置页面。
+/// 包含：
+/// - 主题模式（跟随系统/浅色/深色）
+/// - 主题颜色（预设色块 + 自定义颜色选择器）
+/// - 全局字体选择
+/// </summary>
 public class AppearancePage : UserControl
 {
     private readonly MainForm _mainForm;
     private RadioButton _rbFollowSystem = null!, _rbLight = null!, _rbDark = null!;
-    private Panel _colorPreview = null!;
+    private Panel _colorPreview = null!;           // 当前主题色预览块
     private Button _btnChangeColor = null!;
-    private ComboBox _cboFont = null!;
-    private bool _isLoading;
+    private ComboBox _cboFont = null!;             // 字体选择下拉框
+    private bool _isLoading;                       // 加载时禁止触发保存
 
     public AppearancePage(MainForm mainForm)
     {
@@ -33,11 +40,11 @@ public class AppearancePage : UserControl
             Padding = new Padding(0)
         };
 
-        // Title
+        // 页面标题
         layout.Controls.Add(CreateTitle("外观设置"));
         layout.Controls.Add(CreatePadding(10));
 
-        // Theme mode section
+        // 主题模式分区
         layout.Controls.Add(CreateSectionLabel("主题模式"));
         var modePanel = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, WrapContents = false, Margin = new Padding(10, 5, 0, 10) };
         _rbFollowSystem = new RadioButton { Text = "跟随系统", AutoSize = true, ForeColor = ThemeService.TextColor, Margin = new Padding(0, 0, 20, 0) };
@@ -49,7 +56,7 @@ public class AppearancePage : UserControl
         modePanel.Controls.AddRange(new Control[] { _rbFollowSystem, _rbLight, _rbDark });
         layout.Controls.Add(modePanel);
 
-        // Theme color section
+        // 主题颜色分区
         layout.Controls.Add(CreateSectionLabel("主题颜色"));
         var colorPanel = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, WrapContents = false, Margin = new Padding(10, 5, 0, 10) };
 
@@ -72,15 +79,15 @@ public class AppearancePage : UserControl
         _btnChangeColor.FlatAppearance.BorderColor = ThemeService.ThemeColor;
         _btnChangeColor.Click += BtnChangeColor_Click;
 
-        // Preset colors
+        // 预设颜色色块
         var presetColors = new[] {
-            Color.FromArgb(0, 120, 215),   // Blue (default)
-            Color.FromArgb(16, 137, 62),   // Green
-            Color.FromArgb(232, 17, 35),   // Red
-            Color.FromArgb(136, 23, 152),  // Purple
-            Color.FromArgb(255, 140, 0),   // Orange
-            Color.FromArgb(0, 153, 188),   // Teal
-            Color.FromArgb(76, 74, 72)     // Gray
+            Color.FromArgb(0, 120, 215),   // 蓝色（默认）
+            Color.FromArgb(16, 137, 62),   // 绿色
+            Color.FromArgb(232, 17, 35),   // 红色
+            Color.FromArgb(136, 23, 152),  // 紫色
+            Color.FromArgb(255, 140, 0),   // 橙色
+            Color.FromArgb(0, 153, 188),   // 青色
+            Color.FromArgb(76, 74, 72)     // 灰色
         };
 
         foreach (var pc in presetColors)
@@ -109,7 +116,7 @@ public class AppearancePage : UserControl
         colorPanel.Controls.Add(_btnChangeColor);
         layout.Controls.Add(colorPanel);
 
-        // Font section
+        // 字体设置分区
         layout.Controls.Add(CreateSectionLabel("字体"));
         var fontPanel = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, WrapContents = false, Margin = new Padding(10, 5, 0, 10) };
         _cboFont = new ComboBox
@@ -189,6 +196,7 @@ public class AppearancePage : UserControl
         }
     }
 
+    /// <summary>主题模式单选按钮变化：切换深色/浅色/跟随系统，并立即应用</summary>
     private void ThemeMode_Changed(object? sender, EventArgs e)
     {
         if (_isLoading) return;
@@ -215,6 +223,7 @@ public class AppearancePage : UserControl
         }
     }
 
+    /// <summary>设置主题强调色并立即应用到所有控件</summary>
     private void SetThemeColor(Color color)
     {
         if (_isLoading) return;
@@ -225,6 +234,7 @@ public class AppearancePage : UserControl
         _mainForm.ApplyTheme();
     }
 
+    /// <summary>字体选择变化：更新全局字体并立即应用</summary>
     private void CboFont_SelectedIndexChanged(object? sender, EventArgs e)
     {
         if (_isLoading) return;
