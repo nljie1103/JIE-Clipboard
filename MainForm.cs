@@ -101,10 +101,23 @@ public class MainForm : Form
         _splitContainer = new SplitContainer
         {
             Dock = DockStyle.Fill,
-            FixedPanel = FixedPanel.Panel1,
             IsSplitterFixed = false,
             SplitterWidth = DpiHelper.Scale(4)
         };
+
+        // 先设置面板最小尺寸和分栏位置，再设置 FixedPanel，避免 WinForms 内部约束检查异常
+        try
+        {
+            _splitContainer.Panel1MinSize = DpiHelper.Scale(140);
+            _splitContainer.Panel2MinSize = DpiHelper.Scale(300);
+            _splitContainer.SplitterDistance = DpiHelper.Scale(220);
+            _splitContainer.FixedPanel = FixedPanel.Panel1;
+        }
+        catch (InvalidOperationException)
+        {
+            // SplitContainer 尺寸尚未确定时约束可能无法满足，OnLoad 中会再次设置
+            try { _splitContainer.FixedPanel = FixedPanel.Panel1; } catch { }
+        }
         _splitContainer.Panel1.BackColor = ThemeService.SidebarBackground;
         _splitContainer.Panel2.BackColor = ThemeService.WindowBackground;
 

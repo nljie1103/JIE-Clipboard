@@ -44,12 +44,14 @@ public static class ClipboardService
         // 如果是我们自己写入的，跳过读取（避免重复记录）
         if (IsSelfWriting) return null;
 
-        // 重试机制：每次失败后等待递增时间，提高 Win11 剪贴板访问可靠性
-        for (int attempt = 0; attempt < 3; attempt++)
+        // 重试机制：指数退避（50/100/200/400/800ms），共 5 次，总窗口约 1.5 秒
+        // Win11 剪贴板历史功能或其他进程可能长时间锁定剪贴板，需要足够的等待时间
+        const int maxAttempts = 5;
+        for (int attempt = 0; attempt < maxAttempts; attempt++)
         {
             try
             {
-                if (attempt > 0) Thread.Sleep(50 * attempt);
+                if (attempt > 0) Thread.Sleep(50 * (1 << (attempt - 1))); // 50, 100, 200, 400ms
 
                 // 按优先级检测剪贴板内容类型
                 if (Clipboard.ContainsFileDropList())
@@ -62,9 +64,9 @@ public static class ClipboardService
                     return ReadPlainText();           // 纯文本
                 return null;
             }
-            catch (System.Runtime.InteropServices.ExternalException) when (attempt < 2)
+            catch (System.Runtime.InteropServices.ExternalException) when (attempt < maxAttempts - 1)
             {
-                // 剪贴板被其他进程锁定，重试
+                // 剪贴板被其他进程锁定，等待后重试
                 continue;
             }
             catch (Exception ex)

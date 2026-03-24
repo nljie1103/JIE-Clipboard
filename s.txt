@@ -89,3 +89,13 @@ records.json — 剪贴板记录
 Images\ — 图片文件
 Logs\ — 日志文件
 用户可在"通用设置"中自定义 records/images 的存储路径。
+
+
+数据	加密方式	安全等级
+records.dat（所有记录元数据、文本内容、路径）	Windows DPAPI（DataProtectionScope.CurrentUser）	✅ 高 — 仅当前 Windows 用户可解密，基于用户登录密钥
+用户加密的记录（手动设密码的）	AES-256-CBC + PBKDF2 (100,000 迭代)	✅ 高 — 即使拿到数据库也需要暴力破解密码
+导出文件（上次修复新增）	AES-256-CBC + PBKDF2 (100,000 迭代) + JIEEXP 头	✅ 高
+图片文件（默认）	❌ 明文 PNG 存储在 Images/ 文件夹	⚠️ 低 — 任何人可直接打开
+图片文件（持久化加密开启）	DPAPI 加密为 .enc 文件	✅ 高
+文件/视频（默认）	❌ 仅记录路径，原文件不受保护	⚠️ 低
+文件/视频（持久化加密开启）	DPAPI 加密复制到本地 Files/	✅ 高
