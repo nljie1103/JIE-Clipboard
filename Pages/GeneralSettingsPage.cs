@@ -552,7 +552,9 @@ public class GeneralSettingsPage : UserControl
     {
         try
         {
-            var exePath = Application.ExecutablePath;
+            // 单文件发布时 Application.ExecutablePath 可能指向临时解压目录，
+            // 必须用 Environment.ProcessPath 获取真正的 EXE 路径
+            var exePath = Environment.ProcessPath ?? Application.ExecutablePath;
             using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
                 @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
             if (key == null) return;
