@@ -14,6 +14,7 @@ namespace JIE剪切板.Pages;
 public class SecurityPage : UserControl
 {
     private readonly MainForm _mainForm;
+    private bool _isLoading; // 加载设置时禁止触发保存
     private NumericUpDown _numMaxAttempts = null!, _numBaseLock = null!;
     private ToggleSwitch _swAutoDelete = null!, _swSearchEncrypted = null!;
 
@@ -186,15 +187,21 @@ public class SecurityPage : UserControl
 
     private void LoadSettings()
     {
+        _isLoading = true;
+        try
+        {
         var config = _mainForm.Config;
         _numMaxAttempts.Value = Math.Max(_numMaxAttempts.Minimum, Math.Min(_numMaxAttempts.Maximum, config.DefaultMaxPasswordAttempts));
         _numBaseLock.Value = Math.Max(_numBaseLock.Minimum, Math.Min(_numBaseLock.Maximum, config.DefaultBaseLockMinutes));
         _swAutoDelete.Checked = config.DefaultAutoDeleteOnExceed;
         _swSearchEncrypted.Checked = config.AllowSearchEncryptedContent;
+        }
+        finally { _isLoading = false; }
     }
 
     private void SaveSettings()
     {
+        if (_isLoading) return;
         try
         {
             var config = _mainForm.Config;
@@ -213,6 +220,7 @@ public class SecurityPage : UserControl
     /// <summary>“允许搜索加密内容”开关变化：开启时显示安全警告确认框</summary>
     private void SwSearchEncrypted_Changed(object? sender, EventArgs e)
     {
+        if (_isLoading) return;
         if (_swSearchEncrypted.Checked)
         {
             var result = MessageBox.Show(this,

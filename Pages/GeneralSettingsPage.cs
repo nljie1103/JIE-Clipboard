@@ -17,6 +17,7 @@ namespace JIE剪切板.Pages;
 public class GeneralSettingsPage : UserControl
 {
     private readonly MainForm _mainForm;
+    private bool _isLoading; // 加载设置时禁止触发保存，防止未加载完的默认值覆盖配置
 
     // 存储限制控件
     private ToggleSwitch _swMaxCount = null!, _swMaxSize = null!, _swDedup = null!;
@@ -457,6 +458,9 @@ public class GeneralSettingsPage : UserControl
     /// <summary>从 AppConfig 加载设置到 UI 控件</summary>
     private void LoadSettings()
     {
+        _isLoading = true;
+        try
+        {
         var config = _mainForm.Config;
         _swMaxCount.Checked = config.MaxRecordCountEnabled;
         _numMaxCount.Value = Math.Max(_numMaxCount.Minimum, Math.Min(_numMaxCount.Maximum, config.MaxRecordCount));
@@ -496,11 +500,14 @@ public class GeneralSettingsPage : UserControl
         _chkPersistFolder.Checked = config.PersistFolder;
         _numMaxPersistSize.Value = Math.Max(_numMaxPersistSize.Minimum, Math.Min(_numMaxPersistSize.Maximum, config.MaxPersistFileSizeMB));
         _numMaxPersistSize.Enabled = config.PersistImage || config.PersistFileDrop || config.PersistVideo || config.PersistFolder;
+        }
+        finally { _isLoading = false; }
     }
 
     /// <summary>将 UI 控件的值保存回 AppConfig 并写入磁盘</summary>
     private void SaveSettings()
     {
+        if (_isLoading) return;
         try
         {
             var config = _mainForm.Config;
@@ -560,7 +567,7 @@ public class GeneralSettingsPage : UserControl
             if (key == null) return;
 
             if (_swAutoStart.Checked)
-                key.SetValue("JIE剪切板", $"\"{exePath}\"");
+                key.SetValue("JIE剪切板", $"\"{exePath}\" --silent");
             else
                 key.DeleteValue("JIE剪切板", false);
         }

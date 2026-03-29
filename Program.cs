@@ -42,7 +42,10 @@ internal static class Program
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2); // 启用每监视器 DPI 缩放（适配高分屏/多屏）
             ApplicationConfiguration.Initialize();                // 初始化 WinForms 基础配置
             DpiHelper.Initialize();                               // 初始化自定义 DPI 缩放工具类
-            Application.Run(new MainForm());                      // 启动主窗口并进入消息循环
+            // 检查命令行参数，--silent 表示静默启动（开机自启时直接进入托盘）
+            var args = Environment.GetCommandLineArgs();
+            bool silent = args.Any(a => a.Equals("--silent", StringComparison.OrdinalIgnoreCase));
+            Application.Run(new MainForm(silent));                  // 启动主窗口并进入消息循环
         }
         finally
         {

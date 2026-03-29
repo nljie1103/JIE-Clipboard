@@ -44,6 +44,7 @@ public class MainForm : Form
     private bool _isMonitoring;                      // 是否正在监听剪贴板
     private bool _isExiting;                         // 是否正在退出（防止关闭时再次隐藏）
     private bool _pasteMode;                         // 贴入模式标记（不抢焦点，类似 Win+V）
+    private readonly bool _startSilent;              // 静默启动标志（开机自启时直接托盘）
     private System.Windows.Forms.Timer? _clipboardWatchdog;  // 看门狗定时器（30s 检查监听是否中断）
     private System.Windows.Forms.Timer? _saveThrottleTimer;  // 保存节流定时器（500ms 合并多次保存）
     private bool _saveDataPending;                           // 是否有待写入的保存请求
@@ -55,8 +56,9 @@ public class MainForm : Form
     /// </summary>
     protected override bool ShowWithoutActivation => _pasteMode;
 
-    public MainForm()
+    public MainForm(bool silent = false)
     {
+        _startSilent = silent;
         InitializeData();
         InitializeForm();
         InitializeUI();
@@ -276,6 +278,12 @@ public class MainForm : Form
 
         // 清理上次崩溃残留的临时文件（崩溃恢复）
         ClipboardService.CleanupStaleTempFiles();
+
+        // 静默启动时直接隐藏到托盘（开机自启场景）
+        if (_startSilent)
+        {
+            BeginInvoke(() => Hide());
+        }
     }
 
     /// <summary>
