@@ -28,9 +28,9 @@
     <!-- 根命名空间（代码文件中 namespace 的默认前缀） -->
     <RootNamespace>JIE剪切板</RootNamespace>
     <!-- 程序集版本号：主版本.次版本.修订.构建 -->
-    <AssemblyVersion>3.0.0.9</AssemblyVersion>
+    <AssemblyVersion>3.0.1.1</AssemblyVersion>
     <!-- 文件版本号（显示在文件属性"详细信息"中） -->
-    <FileVersion>3.0.0.9</FileVersion>
+    <FileVersion>3.0.1.1</FileVersion>
     <!-- 产品名称 -->
     <Product>JIE剪切板</Product>
     <!-- 公司/作者名称 -->
@@ -68,7 +68,7 @@
     <!-- 抑制 IL2026 裁剪警告（单文件发布时的反射相关警告） -->
     <NoWarn>IL2026</NoWarn>
     <!-- 应用程序图标（显示在 EXE 文件和任务栏上） -->
-    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <ApplicationIcon>icon\icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <!--
@@ -122,9 +122,9 @@
   -->
   <ItemGroup>
     <!-- 应用程序图标（.ico 格式，用于 EXE 文件图标和任务栏显示） -->
-    <EmbeddedResource Include="icon.ico" LogicalName="icon.ico" />
+    <EmbeddedResource Include="icon\icon.ico" LogicalName="icon.ico" />
     <!-- 应用程序图标的 PNG 版本（用于窗口标题栏和通知区域） -->
-    <EmbeddedResource Include="icon.png" LogicalName="icon.png" />
+    <EmbeddedResource Include="icon\icon.png" LogicalName="icon.png" />
   </ItemGroup>
 
 </Project>

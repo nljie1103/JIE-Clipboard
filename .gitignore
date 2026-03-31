@@ -4,11 +4,13 @@
 # ==============================================
 
 # 1. .NET / C# 编译产物（绝对不能推送）
-bin/
-obj/
-x64/
-x86/
-publish/
+
+# 忽略源码子目录的编译产物
+JIE-Clipboard/bin/
+JIE-Clipboard/obj/
+JIE-Clipboard/x64/
+JIE-Clipboard/x86/
+JIE-Clipboard/publish/
 
 # 2. Visual Studio 编辑器临时文件
 .vs/

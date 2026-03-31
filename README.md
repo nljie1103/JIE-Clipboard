@@ -72,20 +72,18 @@
 # 1. 克隆仓库
 git clone https://github.com/nljie1103/JIE-Clipboard.git
 
-# 2. 进入目录
-cd JIE-Clipboard
+# 2. 进入项目目录
+cd JIE-Clipboard/JIE-Clipboard
 
 # 3. 发布为独立单文件 exe
 dotnet publish -c Release
 ```
 
-构建产物位于 `bin/Release/win-x64/publish/`：
+构建产物位于 `JIE-Clipboard/bin/Release/win-x64/publish/`：
 
 ```
 publish/
-├── JIE剪切板.exe    ← 独立运行的单文件程序（约 71MB，内含 .NET 运行时）
-├── icon.ico          ← 应用图标
-└── icon.png          ← 高清托盘图标
+└── JIE剪切板.exe    ← 独立运行的单文件程序（约 71MB，内含 .NET 运行时，图标已嵌入）
 ```
 
 > **提示：** 如果构建失败提示 `Access Denied`，请先关闭正在运行的 JIE剪切板.exe
@@ -97,9 +95,9 @@ publish/
 ```powershell
 $ws = New-Object -ComObject WScript.Shell
 $s = $ws.CreateShortcut("$([Environment]::GetFolderPath('Desktop'))\JIE剪切板.lnk")
-$s.TargetPath = "$PWD\bin\Release\win-x64\publish\JIE剪切板.exe"
-$s.WorkingDirectory = "$PWD\bin\Release\win-x64\publish"
-$s.IconLocation = "$PWD\bin\Release\win-x64\publish\JIE剪切板.exe,0"
+$s.TargetPath = "$PWD\JIE-Clipboard\bin\Release\win-x64\publish\JIE剪切板.exe"
+$s.WorkingDirectory = "$PWD\JIE-Clipboard\bin\Release\win-x64\publish"
+$s.IconLocation = "$PWD\JIE-Clipboard\bin\Release\win-x64\publish\JIE剪切板.exe,0"
 $s.Save()
 ```
 
@@ -108,43 +106,49 @@ $s.Save()
 ## 📁 项目结构
 
 ```
-JIE-Clipboard/
-├── Program.cs                 # 程序入口（单实例检测 + 全局异常处理）
-├── MainForm.cs                # 主窗口（导航布局、托盘、剪贴板监听、快捷键）
-├── icon.ico / icon.png        # 应用图标资源
-│
-├── Models/                    # 数据模型
-│   ├── AppConfig.cs           #   应用配置（类型过滤、持久化加密、安全策略等）
-│   └── ClipboardRecord.cs     #   剪贴板记录（6 种内容类型 + 加密提示文字）
-│
-├── Services/                  # 核心服务
-│   ├── ClipboardService.cs    #   剪贴板读写 + 内容预览
-│   ├── EncryptionService.cs   #   AES-256-CBC 加密（PBKDF2 100K 迭代）
-│   ├── FileService.cs         #   数据持久化（DPAPI 加密存储 + 文件/文件夹加密）
-│   ├── HotkeyService.cs       #   全局快捷键（Win32 API）
-│   ├── LogService.cs          #   日志记录
-│   └── ThemeService.cs        #   主题管理（浅色/深色/跟随系统）
-│
-├── Controls/                  # 自定义控件
-│   ├── NavigationListBox.cs   #   导航列表（GDI+ 自绘）
-│   ├── RecordListPanel.cs     #   记录列表（虚拟滚动 + 加密缩略图）
-│   └── ToggleSwitch.cs        #   开关控件
-│
-├── Dialogs/                   # 对话框
-│   ├── EditRecordDialog.cs    #   编辑记录（加密/解密、提示文字、安全设置）
-│   └── PasswordDialog.cs      #   密码输入
-│
-├── Pages/                     # 设置页面
-│   ├── AllRecordsPage.cs      #   全部记录（搜索、筛选、批量操作）
-│   ├── GeneralSettingsPage.cs #   通用设置（类型过滤、扩展名、持久化加密）
-│   ├── HotkeyPage.cs          #   快捷键设置
-│   ├── AppearancePage.cs      #   外观主题（主题色、字体、深浅模式）
-│   ├── SecurityPage.cs        #   安全防护（锁定策略、自动销毁）
-│   ├── ExportImportPage.cs    #   导出导入（加密备份 JIEEXP 格式）
-│   └── AboutPage.cs           #   关于
-│
-└── Native/
-    └── Win32Api.cs            # Windows API 声明（P/Invoke）
+main/                # 仓库根目录（GitHub 展示文件）
+├── LICENSE                   # MIT 开源许可证
+├── README.md                 # 项目说明文档
+├── screenshot.png            # 界面预览截图
+├── .gitignore                # Git 忽略规则（屏蔽 bin/obj/临时/发布产物等）
+└── JIE-Clipboard/            # 软件源码目录
+    ├── global.json           # .NET SDK 版本策略配置
+    ├── JIE剪切板.sln         # Visual Studio 解决方案文件
+    ├── JIE剪切板.csproj      # MSBuild 项目文件（编译选项、依赖、嵌入资源）
+    ├── Program.cs            # 程序入口（单实例检测 + 全局异常处理）
+    ├── MainForm.cs           # 主窗口（导航布局、托盘、剪贴板监听、快捷键）
+    ├── icon/                 # 图标资源目录
+    │   ├── icon.ico          #   应用图标（EXE 文件图标）
+    │   ├── icon.png          #   高清 PNG 图标（托盘和标题栏，已抠图透明）
+    │   └── 豆包.png          #   豆包 AI 抠图原始素材
+    ├── Models/               # 数据模型
+    │   ├── AppConfig.cs      #   应用配置（类型过滤、持久化加密、安全策略等）
+    │   └── ClipboardRecord.cs#   剪贴板记录（6 种内容类型 + 加密提示文字）
+    ├── Services/             # 核心服务
+    │   ├── ClipboardService.cs   # 剪贴板读写 + 内容预览
+    │   ├── DpiHelper.cs          # DPI 缩放工具（高 DPI 屏幕适配）
+    │   ├── EncryptionService.cs  # AES-256-CBC 加密（PBKDF2 100K 迭代）
+    │   ├── FileService.cs        # 数据持久化（DPAPI 加密存储 + 文件/文件夹加密）
+    │   ├── HotkeyService.cs      # 全局快捷键（Win32 API）
+    │   ├── LogService.cs         # 日志记录
+    │   └── ThemeService.cs       # 主题管理（浅色/深色/跟随系统）
+    ├── Controls/              # 自定义控件
+    │   ├── NavigationListBox.cs  # 导航列表（GDI+ 自绘）
+    │   ├── RecordListPanel.cs    # 记录列表（虚拟滚动 + 加密缩略图）
+    │   └── ToggleSwitch.cs       # 开关控件
+    ├── Dialogs/               # 对话框
+    │   ├── EditRecordDialog.cs   # 编辑记录（加密/解密、提示文字、安全设置）
+    │   └── PasswordDialog.cs     # 密码输入
+    ├── Pages/                 # 设置页面
+    │   ├── AllRecordsPage.cs     # 全部记录（搜索、筛选、批量操作）
+    │   ├── GeneralSettingsPage.cs# 通用设置（类型过滤、扩展名、持久化加密）
+    │   ├── HotkeyPage.cs         # 快捷键设置
+    │   ├── AppearancePage.cs     # 外观主题（主题色、字体、深浅模式）
+    │   ├── SecurityPage.cs       # 安全防护（锁定策略、自动销毁）
+    │   ├── ExportImportPage.cs   # 导出导入（加密备份 JIEEXP 格式）
+    │   └── AboutPage.cs          # 关于
+    └── Native/                # Windows 原生 API
+        └── Win32Api.cs           # Windows API 声明（P/Invoke）
 ```
 
 ---
