@@ -19,6 +19,9 @@ public class HotkeyService : IDisposable
     /// <summary>快捷键 ID 到回调方法的映射，触发快捷键时执行对应的回调</summary>
     private readonly Dictionary<int, Action> _callbacks = new();
 
+    /// <summary>已注册快捷键的参数（用于冲突检测时临时注销后恢复）</summary>
+    private readonly Dictionary<int, (int Modifiers, int Key)> _registeredParams = new();
+
     private bool _disposed;
 
     /// <summary>初始化服务，传入主窗口句柄</summary>
@@ -40,7 +43,11 @@ public class HotkeyService : IDisposable
         {
             UnregisterHotkey(id); // 先注销旧的，防止重复注册
             bool result = Win32Api.RegisterHotKey(_windowHandle, id, (uint)modifiers, (uint)key);
-            if (result) _callbacks[id] = callback;
+            if (result)
+            {
+                _callbacks[id] = callback;
+                _registeredParams[id] = (modifiers, key);
+            }
             else LogService.Log($"Hotkey registration failed: ID={id}, Error={Marshal.GetLastWin32Error()}");
             return result;
         }
@@ -58,6 +65,7 @@ public class HotkeyService : IDisposable
         {
             Win32Api.UnregisterHotKey(_windowHandle, id);
             _callbacks.Remove(id);
+            _registeredParams.Remove(id);
         }
         catch { }
     }
@@ -79,6 +87,46 @@ public class HotkeyService : IDisposable
             return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// 测试指定快捷键组合是否可用（未被其他程序占用）。
+    /// 使用临时 ID 尝试注册，成功后立即注销。
+    /// </summary>
+    /// <param name="modifiers">修饰键组合</param>
+    /// <param name="key">主键虚拟键码</param>
+    /// <param name="excludeId">排除的已注册 ID（自身已注册的快捷键不算冲突），-1 表示不排除</param>
+    /// <returns>true 表示可用，false 表示已被占用</returns>
+    public bool TestHotkeyAvailable(int modifiers, int key, int excludeId = -1)
+    {
+        if (_windowHandle == IntPtr.Zero) return false;
+
+        // 如果与自身已注册的快捷键相同，先临时注销以避免误判
+        bool needRestore = false;
+        (int Modifiers, int Key) originalParams = default;
+        if (excludeId >= 0 && _registeredParams.TryGetValue(excludeId, out originalParams))
+        {
+            Win32Api.UnregisterHotKey(_windowHandle, excludeId);
+            needRestore = true;
+        }
+
+        const int TEST_ID = 9999;
+        try
+        {
+            bool available = Win32Api.RegisterHotKey(_windowHandle, TEST_ID, (uint)modifiers, (uint)key);
+            if (available)
+                Win32Api.UnregisterHotKey(_windowHandle, TEST_ID);
+            return available;
+        }
+        finally
+        {
+            // 用原始参数恢复之前临时注销的快捷键
+            if (needRestore)
+            {
+                Win32Api.RegisterHotKey(_windowHandle, excludeId,
+                    (uint)originalParams.Modifiers, (uint)originalParams.Key);
+            }
+        }
     }
 
     /// <summary>

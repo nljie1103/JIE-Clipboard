@@ -186,8 +186,20 @@ public class HotkeyPage : UserControl
         _isRecording = false;
         _txtHotkey.Text = HotkeyService.GetHotkeyDisplayText(modifiers, (int)key);
         _txtHotkey.BackColor = ThemeService.IsDarkMode ? Color.FromArgb(50, 50, 50) : Color.White;
-        _lblStatus.ForeColor = ThemeService.ThemeColor;
-        _lblStatus.Text = "已录入快捷键，请点击保存按钮应用";
+
+        // 快捷键冲突检测：检查是否被其他程序占用
+        bool available = _mainForm.HotkeyService.TestHotkeyAvailable(
+            modifiers, (int)key, HotkeyService.HOTKEY_WAKE);
+        if (!available)
+        {
+            _lblStatus.ForeColor = Color.OrangeRed;
+            _lblStatus.Text = "⚠ 该快捷键已被其他程序占用，保存后可能无法生效";
+        }
+        else
+        {
+            _lblStatus.ForeColor = ThemeService.ThemeColor;
+            _lblStatus.Text = "已录入快捷键，请点击保存按钮应用";
+        }
     }
 
     /// <summary>失去焦点时取消录入，恢复原始显示</summary>
@@ -212,10 +224,18 @@ public class HotkeyPage : UserControl
             config.WakeHotkey.DisplayText = HotkeyService.GetHotkeyDisplayText(_pendingModifiers, _pendingKey);
 
             FileService.SaveConfig(config);
-            _mainForm.ReregisterHotkey();
+            bool registered = _mainForm.ReregisterHotkey();
 
-            _lblStatus.ForeColor = Color.Green;
-            _lblStatus.Text = "快捷键已保存并生效";
+            if (registered)
+            {
+                _lblStatus.ForeColor = Color.Green;
+                _lblStatus.Text = "快捷键已保存并生效";
+            }
+            else
+            {
+                _lblStatus.ForeColor = Color.Red;
+                _lblStatus.Text = "快捷键已保存，但注册失败（被其他程序占用）";
+            }
         }
         catch (Exception ex)
         {

@@ -1,4 +1,4 @@
-using JIE剪切板.Controls;
+﻿using JIE剪切板.Controls;
 using JIE剪切板.Models;
 using JIE剪切板.Native;
 using JIE剪切板.Pages;
@@ -9,23 +9,26 @@ namespace JIE剪切板;
 /// <summary>
 /// 应用程序主窗口。
 /// 职责：
-///  1. 数据初始化（加载配置、记录、注册热键、启用剪贴板监听）
+///  1. 数据初始化（加载配置、创建 RecordManager、注册热键）
 ///  2. UI 布局（左侧导航栏 + 右侧内容区 + 系统托盘图标）
-///  3. 剪贴板监听（WM_CLIPBOARDUPDATE + 看门狗 watchdog 定时重注册）
-///  4. 记录操作（复制粘贴、删除、节流保存、持久化加密存储）
-///  5. 窗口管理（贴入模式 pasteMode —— 不抢焦点；设置模式 —— 正常激活）
-///  6. 主题切换（销毁并重建所有 Pages）
+///  3. 窗口管理（贴入模式 pasteMode —— 不抢焦点；设置模式 —— 正常激活）
+///  4. WndProc 消息分发（剪贴板 → RecordManager、热键 → HotkeyService）
+///  5. 主题切换（销毁并重建所有 Pages）
+///
+/// 记录管理（CRUD、过滤、去重、持久化、节流保存）由 RecordManager 负责。
 /// </summary>
 public class MainForm : Form
 {
     // ==================== 数据 ====================
     /// <summary>全局配置对象，由 FileService.LoadConfig() 加载</summary>
     public AppConfig Config { get; private set; } = null!;
-    /// <summary>所有剪贴板记录列表，由 FileService.LoadRecords() 加载（DPAPI 解密）</summary>
-    public List<ClipboardRecord> Records { get; private set; } = null!;
+    /// <summary>剪贴板记录列表（委托给 RecordManager）</summary>
+    public List<ClipboardRecord> Records => _recordManager.Records;
 
     // ==================== 服务 ====================
     private HotkeyService _hotkeyService = null!; // 全局热键注册/注销服务
+    public HotkeyService HotkeyService => _hotkeyService;
+    private RecordManager _recordManager = null!;  // 记录管理器（CRUD + 过滤 + 持久化）
 
     // ==================== UI 控件 ====================
     private NavigationListBox _navList = null!;    // 左侧导航列表
@@ -47,8 +50,6 @@ public class MainForm : Form
     private readonly bool _startSilent;              // 静默启动标志（开机自启时直接托盘）
     private bool _suppressAutoHide;                  // 对话框交互期间阻止自动隐藏
     private System.Windows.Forms.Timer? _clipboardWatchdog;  // 看门狗定时器（30s 检查监听是否中断）
-    private System.Windows.Forms.Timer? _saveThrottleTimer;  // 保存节流定时器（500ms 合并多次保存）
-    private bool _saveDataPending;                           // 是否有待写入的保存请求
     private DateTime _lastClipboardUpdate = DateTime.UtcNow; // 上次收到剪贴板更新的时间（用于看门狗判断）
 
     /// <summary>
@@ -68,7 +69,7 @@ public class MainForm : Form
 
     #region Initialization
 
-    /// <summary>初始化数据层：目录结构、日志、配置、记录、主题、热键服务</summary>
+    /// <summary>初始化数据层：目录结构、日志、配置、记录管理器、主题、热键服务</summary>
     private void InitializeData()
     {
         FileService.EnsureDirectories();
@@ -76,7 +77,9 @@ public class MainForm : Form
         Config = FileService.LoadConfig();
         if (!string.IsNullOrEmpty(Config.CustomDataFolder))
             FileService.SetCustomDataFolder(Config.CustomDataFolder);
-        Records = FileService.LoadRecords();
+        var records = FileService.LoadRecords();
+        _recordManager = new RecordManager(() => Config, records);
+        _recordManager.RecordsChanged += RefreshCurrentPage;
         ThemeService.Initialize(Config);
         _hotkeyService = new HotkeyService();
     }
@@ -280,12 +283,11 @@ public class MainForm : Form
         _clipboardWatchdog.Tick += ClipboardWatchdog_Tick;
         _clipboardWatchdog.Start();
 
-        // 保存节流定时器（500ms 合并多次快速保存请求，减少磁盘 I/O）
-        _saveThrottleTimer = new System.Windows.Forms.Timer { Interval = 500 };
-        _saveThrottleTimer.Tick += (_, _) => { _saveThrottleTimer.Stop(); FlushSaveData(); };
+        // 初始化记录管理器的节流保存定时器
+        _recordManager.InitializeSaveTimer();
 
         // 清理已过期的记录
-        CleanupExpiredRecords();
+        _recordManager.CleanupExpiredRecords();
 
         // 清理上次崩溃残留的临时文件（崩溃恢复）
         ClipboardService.CleanupStaleTempFiles();
@@ -312,9 +314,8 @@ public class MainForm : Form
         }
 
         // 清理资源：保存数据、停止定时器、注销监听、准备退出
-        FlushSaveData();
-        _saveThrottleTimer?.Stop();
-        _saveThrottleTimer?.Dispose();
+        _recordManager.FlushSaveData();
+        _recordManager.Dispose();
         _clipboardWatchdog?.Stop();
         _clipboardWatchdog?.Dispose();
         Win32Api.RemoveClipboardFormatListener(Handle);
@@ -435,87 +436,14 @@ public class MainForm : Form
     #region Clipboard Monitoring
 
     /// <summary>
-    /// 剪贴板内容变化回调（核心方法）。
-    /// 执行流程：
-    ///  1. 读取剪贴板内容 → ClipboardRecord
-    ///  2. 类型过滤（IsTypeAllowed）+ 后缀过滤（AreExtensionsAllowed）
-    ///  3. 大小限制检查
-    ///  4. 去重（相同 hash → 移到顶部）
-    ///  5. 持久化加密存储（ApplyPersistentStorage）
-    ///  6. 超量裁剪（移除最旧的非置顶记录）
-    ///  7. 保存 + 刷新页面
+    /// 剪贴板内容变化回调。
+    /// 前置检查（监听状态、自写过滤）后委托给 RecordManager 处理。
     /// </summary>
     private void OnClipboardUpdate()
     {
         if (!_isMonitoring || ClipboardService.IsSelfWriting) return;
         _lastClipboardUpdate = DateTime.UtcNow;
-
-        try
-        {
-            var record = ClipboardService.ReadFromClipboard();
-            if (record == null) return;
-
-            // 检查记录类型是否允许（用户可在设置中禁用某些类型）
-            if (!IsTypeAllowed(record.ContentType)) return;
-
-            // 检查后缀名过滤（仅对文件类型有效）
-            if (record.ContentType is ClipboardContentType.FileDrop or ClipboardContentType.Video or ClipboardContentType.Folder)
-            {
-                var paths = record.Content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                if (!AreExtensionsAllowed(paths)) return;
-            }
-
-            // 检查单条内容大小是否超限
-            if (Config.MaxContentSizeEnabled && !string.IsNullOrEmpty(record.Content))
-            {
-                long sizeKB = System.Text.Encoding.UTF8.GetByteCount(record.Content) / 1024;
-                if (sizeKB > Config.MaxContentSizeKB) return;
-            }
-
-            // 去重处理：相同 hash 的记录不重复添加，而是移到顶部
-            if (Config.EnableDuplicateRemoval && !string.IsNullOrEmpty(record.ContentHash))
-            {
-                var existing = Records.FirstOrDefault(r =>
-                    !r.IsEncrypted && r.ContentHash == record.ContentHash);
-                if (existing != null)
-                {
-                    // 将已有记录移到顶部（更新时间），重置复制计数以便再次使用
-                    existing.CreateTime = DateTime.UtcNow;
-                    existing.CurrentCopyCount = 0;
-                    SaveData();
-                    RefreshCurrentPage();
-                    return;
-                }
-            }
-
-            Records.Insert(0, record);
-
-            // 按类型应用持久化加密存储（图片/文件/视频/文件夹）
-            ApplyPersistentStorage(record);
-
-            // 强制最大记录数限制
-            if (Config.MaxRecordCountEnabled && Records.Count > Config.MaxRecordCount)
-            {
-                // 移除最旧的非置顶记录
-                var toRemove = Records
-                    .Where(r => !r.IsPinned)
-                    .OrderBy(r => r.CreateTime)
-                    .Take(Records.Count - Config.MaxRecordCount)
-                    .ToList();
-                foreach (var r in toRemove)
-                {
-                    FileService.DeleteRecordFiles(r);
-                    Records.Remove(r);
-                }
-            }
-
-            SaveData();
-            RefreshCurrentPage();
-        }
-        catch (Exception ex)
-        {
-            LogService.Log("Clipboard update handler failed", ex);
-        }
+        _recordManager.ProcessClipboardUpdate();
     }
 
     /// <summary>
@@ -527,7 +455,6 @@ public class MainForm : Form
     {
         try
         {
-            // 超过60秒没有收到剪贴板事件 → 可能监听器已失效，尝试重新注册
             if (_isMonitoring && IsHandleCreated && !_isExiting
                 && (DateTime.UtcNow - _lastClipboardUpdate).TotalSeconds > 60)
             {
@@ -536,8 +463,7 @@ public class MainForm : Form
                     LogService.Log("Clipboard watchdog: failed to re-register listener");
             }
 
-            // 定期清理过期记录
-            CleanupExpiredRecords();
+            _recordManager.CleanupExpiredRecords();
         }
         catch (Exception ex)
         {
@@ -605,44 +531,17 @@ public class MainForm : Form
         }
     }
 
-    /// <summary>删除单条记录（清理关联文件 + 从列表移除）</summary>
-    public void DeleteRecord(ClipboardRecord record)
-    {
-        FileService.DeleteRecordFiles(record);
-        Records.Remove(record);
-    }
+    /// <summary>删除单条记录（委托给 RecordManager）</summary>
+    public void DeleteRecord(ClipboardRecord record) => _recordManager.DeleteRecord(record);
 
-    /// <summary>清空所有记录</summary>
-    public void ClearAllRecords()
-    {
-        foreach (var r in Records.ToList())
-            FileService.DeleteRecordFiles(r);
-        Records.Clear();
-        SaveData();
-    }
+    /// <summary>清空所有记录（委托给 RecordManager）</summary>
+    public void ClearAllRecords() => _recordManager.ClearAllRecords();
 
-    /// <summary>请求保存数据（节流式：500ms 内多次调用只刷盘一次）</summary>
-    public void SaveData()
-    {
-        _saveDataPending = true;
-        if (_saveThrottleTimer != null && !_saveThrottleTimer.Enabled)
-            _saveThrottleTimer.Start();
-    }
+    /// <summary>请求保存数据（委托给 RecordManager，节流式）</summary>
+    public void SaveData() => _recordManager.SaveData();
 
-    /// <summary>立即刷盘保存（节流定时器触发或程序退出时调用）</summary>
-    private void FlushSaveData()
-    {
-        if (!_saveDataPending) return;
-        _saveDataPending = false;
-        try
-        {
-            FileService.SaveRecords(Records);
-        }
-        catch (Exception ex)
-        {
-            LogService.Log("Failed to save data", ex);
-        }
-    }
+    /// <summary>立即刷盘保存（程序退出时调用）</summary>
+    private void FlushSaveData() => _recordManager.FlushSaveData();
 
     #endregion
 
@@ -714,7 +613,7 @@ public class MainForm : Form
     #region Hotkey
 
     /// <summary>注册全局唤醒热键（来自配置的 Modifiers+Key）</summary>
-    private void RegisterWakeHotkey()
+    private bool RegisterWakeHotkey()
     {
         var hotkey = Config.WakeHotkey;
         bool result = _hotkeyService.RegisterHotkey(
@@ -725,13 +624,15 @@ public class MainForm : Form
 
         if (!result)
             LogService.Log($"Failed to register wake hotkey: {hotkey.DisplayText}");
+        return result;
     }
 
     /// <summary>重新注册热键（用户修改快捷键后调用）</summary>
-    public void ReregisterHotkey()
+    /// <returns>注册是否成功（false 表示快捷键被其他程序占用）</returns>
+    public bool ReregisterHotkey()
     {
         _hotkeyService.UnregisterHotkey(HotkeyService.HOTKEY_WAKE);
-        RegisterWakeHotkey();
+        return RegisterWakeHotkey();
     }
 
     #endregion
@@ -835,177 +736,14 @@ public class MainForm : Form
 
     #region Cleanup
 
-    /// <summary>清理已过期且未置顶的记录</summary>
-    private void CleanupExpiredRecords()
-    {
-        try
-        {
-            var now = DateTime.UtcNow;
-            var expired = Records.Where(r => r.ExpireTime.HasValue && r.ExpireTime.Value <= now && !r.IsPinned).ToList();
-            foreach (var r in expired)
-            {
-                FileService.DeleteRecordFiles(r);
-                Records.Remove(r);
-            }
-            if (expired.Count > 0)
-            {
-                SaveData();
-                LogService.Log($"Cleaned up {expired.Count} expired records");
-            }
-        }
-        catch (Exception ex)
-        {
-            LogService.Log("Expired record cleanup failed", ex);
-        }
-    }
-
-    #endregion
-
-    #region Record Type Filtering
-
-    /// <summary>检查指定类型是否允许记录（根据配置中的 6 个开关）</summary>
-    private bool IsTypeAllowed(ClipboardContentType type) => type switch
-    {
-        ClipboardContentType.PlainText => Config.RecordPlainText,
-        ClipboardContentType.RichText => Config.RecordRichText,
-        ClipboardContentType.Image => Config.RecordImage,
-        ClipboardContentType.FileDrop => Config.RecordFileDrop,
-        ClipboardContentType.Video => Config.RecordVideo,
-        ClipboardContentType.Folder => Config.RecordFolder,
-        _ => true
-    };
-
-    /// <summary>
-    /// 检查文件后缀是否允许：
-    /// - 包含列表非空 → 至少一个文件匹配才允许
-    /// - 排除列表非空 → 所有文件都匹配排除列表才拒绝
-    /// </summary>
-    private bool AreExtensionsAllowed(string[] paths)
-    {
-        var include = ParseExtensions(Config.IncludeExtensions);
-        var exclude = ParseExtensions(Config.ExcludeExtensions);
-
-        if (include.Count > 0)
-            return paths.Any(p => include.Contains(Path.GetExtension(p).ToLowerInvariant()));
-        if (exclude.Count > 0)
-            return !paths.All(p => exclude.Contains(Path.GetExtension(p).ToLowerInvariant()));
-        return true;
-    }
-
-    /// <summary>解析逗号分隔的后缀列表字符串为 HashSet，自动补全前导点</summary>
-    private static HashSet<string> ParseExtensions(string ext)
-    {
-        if (string.IsNullOrWhiteSpace(ext)) return new();
-        return ext.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                  .Select(e => e.StartsWith('.') ? e.ToLowerInvariant() : "." + e.ToLowerInvariant())
-                  .ToHashSet();
-    }
-
-    #endregion
-
-    #region Persistent Encrypted Storage
-
-    /// <summary>
-    /// 根据记录类型应用持久化加密存储：
-    /// - Image → DPAPI 加密图片文件（.enc）
-    /// - Video/FileDrop → 复制+DPAPI 加密（受单文件大小限制）
-    /// - Folder → zip压缩+DPAPI 加密（.zip.enc）
-    /// </summary>
-    private void ApplyPersistentStorage(ClipboardRecord record)
-    {
-        try
-        {
-            long maxBytes = Config.MaxPersistFileSizeMB * 1024L * 1024;
-
-            switch (record.ContentType)
-            {
-                case ClipboardContentType.Image:
-                    if (!Config.PersistImage) return;
-                    if (File.Exists(record.Content) && !record.Content.EndsWith(".enc", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var encPath = FileService.EncryptExistingFile(record.Content);
-                        if (!string.IsNullOrEmpty(encPath))
-                        {
-                            try { File.Delete(record.Content); } catch { }
-                            record.Content = encPath;
-                            record.ContentHash = EncryptionService.ComputeContentHash(record.Content);
-                        }
-                    }
-                    break;
-
-                case ClipboardContentType.Video:
-                    if (!Config.PersistVideo) return;
-                    EncryptFileDropPaths(record, maxBytes);
-                    break;
-
-                case ClipboardContentType.FileDrop:
-                    if (!Config.PersistFileDrop) return;
-                    EncryptFileDropPaths(record, maxBytes);
-                    break;
-
-                case ClipboardContentType.Folder:
-                    if (!Config.PersistFolder) return;
-                    var folderPaths = record.Content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                    var encFolderPaths = new List<string>();
-                    foreach (var fp in folderPaths)
-                    {
-                        if (Directory.Exists(fp))
-                        {
-                            var enc = FileService.SaveAndEncryptFolder(fp, maxBytes);
-                            encFolderPaths.Add(!string.IsNullOrEmpty(enc) ? enc : fp);
-                        }
-                        else
-                        {
-                            encFolderPaths.Add(fp);
-                        }
-                    }
-                    record.Content = string.Join("\n", encFolderPaths);
-                    record.ContentHash = EncryptionService.ComputeContentHash(record.Content);
-                    break;
-            }
-        }
-        catch (Exception ex)
-        {
-            LogService.Log("Failed to apply persistent storage", ex);
-        }
-    }
-
-    /// <summary>对文件拖放路径逐个复制并加密（超过大小限制的保留原路径）</summary>
-    private void EncryptFileDropPaths(ClipboardRecord record, long maxBytes)
-    {
-        var paths = record.Content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        var encPaths = new List<string>();
-        foreach (var path in paths)
-        {
-            if (File.Exists(path))
-            {
-                var fi = new FileInfo(path);
-                if (fi.Length <= maxBytes)
-                {
-                    var enc = FileService.SaveAndEncryptFile(path);
-                    encPaths.Add(!string.IsNullOrEmpty(enc) ? enc : path);
-                }
-                else
-                {
-                    encPaths.Add(path);
-                }
-            }
-            else
-            {
-                encPaths.Add(path);
-            }
-        }
-        record.Content = string.Join("\n", encPaths);
-        record.ContentHash = EncryptionService.ComputeContentHash(record.Content);
-    }
-
-    #endregion
-
-    /// <summary>完全退出应用（设置 _isExiting 以跳过“隐藏”逻辑）</summary>
+    /// <summary>完全退出应用（设置 _isExiting 以跳过"隐藏"逻辑）</summary>
     private void ExitApplication()
     {
         _isExiting = true;
         Close();
         Application.Exit();
     }
+
+    #endregion
 }
+
