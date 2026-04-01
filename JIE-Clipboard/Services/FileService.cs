@@ -630,10 +630,14 @@ public static class FileService
             }
             return "";
         }
+        catch (UnauthorizedAccessException)
+        {
+            return "导出失败：没有写入该位置的权限";
+        }
         catch (Exception ex)
         {
             LogService.Log("Export failed", ex);
-            return $"导出失败: {ex.Message}";
+            return "导出失败：写入文件时出错，请检查目标路径是否可用";
         }
     }
 
@@ -669,10 +673,14 @@ public static class FileService
 
             return (data.Records, data.Config, "");
         }
+        catch (JsonException)
+        {
+            return (null, null, "导入失败：文件格式不正确，请选择有效的 JSON 备份文件");
+        }
         catch (Exception ex)
         {
             LogService.Log("Import failed", ex);
-            return (null, null, $"导入失败: {ex.Message}");
+            return (null, null, TranslateImportError(ex));
         }
     }
 
@@ -743,12 +751,26 @@ public static class FileService
         catch (Exception ex)
         {
             LogService.Log("Import encrypted failed", ex);
-            return (null, null, $"导入解密失败: {ex.Message}");
+            return (null, null, TranslateImportError(ex));
         }
         finally
         {
             if (key != null) CryptographicOperations.ZeroMemory(key);
         }
+    }
+
+    /// <summary>将导入异常翻译为用户友好的中文提示</summary>
+    private static string TranslateImportError(Exception ex)
+    {
+        return ex switch
+        {
+            JsonException => "导入失败：文件格式不正确，请选择有效的备份文件",
+            UnauthorizedAccessException => "导入失败：没有读取该文件的权限",
+            IOException => "导入失败：文件读取出错，请确认文件未被占用",
+            System.Security.Cryptography.CryptographicException => "导入失败：解密出错，密码可能不正确",
+            OutOfMemoryException => "导入失败：文件过大，内存不足",
+            _ => "导入失败：文件无法识别，请确认选择了正确的备份文件"
+        };
     }
 
     /// <summary>
