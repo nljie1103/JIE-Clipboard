@@ -489,8 +489,12 @@ public class MainForm : Form
             record.CurrentCopyCount++;
             SaveData();
 
-            // 写入系统剪贴板
-            ClipboardService.WriteToClipboard(record);
+            // 写入系统剪贴板（失败则不执行粘贴，避免粘贴旧内容）
+            if (!ClipboardService.WriteToClipboard(record))
+            {
+                LogService.Log($"Failed to write record to clipboard: {record.ContentType}");
+                return;
+            }
 
             // 隐藏窗口并自动粘贴
             HideAndPaste();
@@ -526,10 +530,23 @@ public class MainForm : Form
             {
                 await Task.Delay(50);
                 Win32Api.SetForegroundWindow(targetWindow);
-                await Task.Delay(100);
-                // 确认目标窗口确实获得了焦点再发送粘贴（防止竞态发到错误窗口）
-                if (Win32Api.GetForegroundWindow() == targetWindow)
+
+                // 轮询等待目标窗口激活（最多 500ms），比固定延时更可靠
+                bool activated = false;
+                for (int i = 0; i < 10; i++)
+                {
+                    await Task.Delay(50);
+                    if (Win32Api.GetForegroundWindow() == targetWindow)
+                    {
+                        activated = true;
+                        break;
+                    }
+                }
+
+                if (activated)
                     Win32Api.SendCtrlV();
+                else
+                    LogService.Log("HideAndPaste: target window activation timed out");
             }
         }
         catch (Exception ex)

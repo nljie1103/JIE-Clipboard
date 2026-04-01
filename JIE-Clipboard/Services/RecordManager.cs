@@ -86,9 +86,11 @@ public class RecordManager : IDisposable
                     !r.IsEncrypted && r.ContentHash == record.ContentHash);
                 if (existing != null)
                 {
-                    // 将已有记录移到顶部（更新时间），重置复制计数以便再次使用
+                    // 将已有记录移到列表顶部（更新时间 + 物理移动），重置复制计数
                     existing.CreateTime = DateTime.UtcNow;
                     existing.CurrentCopyCount = 0;
+                    Records.Remove(existing);
+                    Records.Insert(0, existing);
                     SaveData();
                     RecordsChanged?.Invoke();
                     return;
@@ -231,8 +233,8 @@ public class RecordManager : IDisposable
 
     /// <summary>
     /// 检查文件后缀是否允许：
-    /// - 包含列表非空 → 至少一个文件匹配才允许
-    /// - 排除列表非空 → 所有文件都匹配排除列表才拒绝
+    /// - 包含列表非空 → 所有文件都必须在白名单中
+    /// - 排除列表非空 → 任何一个文件在黑名单中即拒绝
     /// </summary>
     private bool AreExtensionsAllowed(string[] paths)
     {
@@ -240,9 +242,9 @@ public class RecordManager : IDisposable
         var exclude = ParseExtensions(Config.ExcludeExtensions);
 
         if (include.Count > 0)
-            return paths.Any(p => include.Contains(Path.GetExtension(p).ToLowerInvariant()));
+            return paths.All(p => include.Contains(Path.GetExtension(p).ToLowerInvariant()));
         if (exclude.Count > 0)
-            return !paths.All(p => exclude.Contains(Path.GetExtension(p).ToLowerInvariant()));
+            return !paths.Any(p => exclude.Contains(Path.GetExtension(p).ToLowerInvariant()));
         return true;
     }
 
