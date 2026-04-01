@@ -546,7 +546,12 @@ public class MainForm : Form
                 if (activated)
                     Win32Api.SendCtrlV();
                 else
+                {
                     LogService.Log("HideAndPaste: target window activation timed out");
+                    _trayIcon.ShowBalloonTip(2000, "JIE 剪切板",
+                        "已复制到剪贴板，但自动粘贴失败（目标窗口未响应）。请手动 Ctrl+V。",
+                        ToolTipIcon.Warning);
+                }
             }
         }
         catch (Exception ex)

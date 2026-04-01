@@ -23,15 +23,33 @@ public static class ClipboardService
     /// <summary>自写计数器：>0 表示当前程序正在向剪贴板写入数据，应忽略 WM_CLIPBOARDUPDATE 消息</summary>
     private static int _selfWriteCount = 0;
 
+    /// <summary>自写保护延迟（ms）：递减前等待系统投递 WM_CLIPBOARDUPDATE</summary>
+    private const int SelfWriteGuardDelayMs = 100;
+
     /// <summary>跟踪待清理的临时文件路径（线程安全）</summary>
     private static readonly ConcurrentBag<string> _pendingTempFiles = new();
 
     /// <summary>跟踪待清理的临时文件夹路径（线程安全）</summary>
     private static readonly ConcurrentBag<string> _pendingTempFolders = new();
 
-    /// <summary>是否正在自己写入剪贴板（原子操作读取）</summary>
-    public static bool IsSelfWriting =>
-        Interlocked.CompareExchange(ref _selfWriteCount, 0, 0) > 0;
+    /// <summary>
+    /// 是否正在自己写入剪贴板（原子操作读取）。
+    /// 含安全阈值：计数异常偏高时强制归零，防止异常导致监听永久失效。
+    /// </summary>
+    public static bool IsSelfWriting
+    {
+        get
+        {
+            int count = Interlocked.CompareExchange(ref _selfWriteCount, 0, 0);
+            if (count > 3)
+            {
+                LogService.Log($"WARNING: _selfWriteCount={count}, force reset to 0");
+                Interlocked.Exchange(ref _selfWriteCount, 0);
+                return false;
+            }
+            return count > 0;
+        }
+    }
 
     /// <summary>
     /// 从系统剪贴板读取当前内容，返回一条 ClipboardRecord。
@@ -235,8 +253,8 @@ public static class ClipboardService
         }
         finally
         {
-            // 200ms 后清除自写标志（给系统时间处理剪贴板更新通知）
-            Task.Delay(200).ContinueWith(_ => Interlocked.Decrement(ref _selfWriteCount));
+            // 延迟递减自写标志（等系统投递 WM_CLIPBOARDUPDATE 后再清除）
+            Task.Delay(SelfWriteGuardDelayMs).ContinueWith(_ => Interlocked.Decrement(ref _selfWriteCount));
         }
     }
 

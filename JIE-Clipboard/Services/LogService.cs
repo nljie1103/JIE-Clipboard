@@ -58,14 +58,30 @@ public static class LogService
     }
 
     /// <summary>
-    /// 脱敏日志消息：将用户主目录路径替换为 %USERPROFILE%，防止泄露用户名。
-    /// 例如 "C:\Users\Admin\file.txt" → "%USERPROFILE%\file.txt"
+    /// 脱敏日志消息：将各类敏感路径替换为环境变量占位符，防止泄露用户名等隐私信息。
+    /// 替换顺序：长路径优先（USERPROFILE 包含 APPDATA），避免部分替换。
     /// </summary>
     private static string SanitizeLogMessage(string message)
     {
-        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        if (!string.IsNullOrEmpty(userProfile))
-            message = message.Replace(userProfile, "%USERPROFILE%");
+        // 按路径长度降序替换，避免短路径先匹配导致长路径替换不完整
+        ReadOnlySpan<(Environment.SpecialFolder folder, string token)> mappings =
+        [
+            (Environment.SpecialFolder.LocalApplicationData, "%LOCALAPPDATA%"),
+            (Environment.SpecialFolder.ApplicationData, "%APPDATA%"),
+            (Environment.SpecialFolder.UserProfile, "%USERPROFILE%"),
+        ];
+        foreach (var (folder, token) in mappings)
+        {
+            var path = Environment.GetFolderPath(folder);
+            if (!string.IsNullOrEmpty(path))
+                message = message.Replace(path, token);
+        }
+
+        // 脱敏临时目录
+        var temp = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
+        if (!string.IsNullOrEmpty(temp))
+            message = message.Replace(temp, "%TEMP%");
+
         return message;
     }
 
