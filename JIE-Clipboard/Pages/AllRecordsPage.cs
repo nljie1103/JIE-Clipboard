@@ -82,6 +82,8 @@ public class AllRecordsPage : UserControl
 
         // 操作按钮区
         _buttonPanel = new Panel { Dock = DockStyle.Top, Height = DpiHelper.Scale(45), Padding = new Padding(DpiHelper.Scale(15), DpiHelper.Scale(5), DpiHelper.Scale(15), DpiHelper.Scale(5)) };
+        var btnNewRecord = CreateButton("新建记录", Color.FromArgb(40, 167, 69));
+        btnNewRecord.Click += BtnNewRecord_Click;
         var btnClearAll = CreateButton("清除全部记录", Color.FromArgb(220, 53, 69));
         btnClearAll.Click += BtnClearAll_Click;
         var btnClearBefore = CreateButton("清除指定日期前记录", ThemeService.ThemeColor);
@@ -92,7 +94,7 @@ public class AllRecordsPage : UserControl
         btnClearUnpinned.Click += BtnClearUnpinned_Click;
 
         var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
-        flow.Controls.AddRange(new Control[] { btnClearAll, btnClearBefore, btnClearAfter, btnClearUnpinned });
+        flow.Controls.AddRange(new Control[] { btnNewRecord, btnClearAll, btnClearBefore, btnClearAfter, btnClearUnpinned });
         _buttonPanel.Controls.Add(flow);
 
         // 记录列表控件
@@ -435,6 +437,46 @@ public class AllRecordsPage : UserControl
             pinItem.Text = args.record.IsPinned ? "取消置顶" : "置顶";
         }
         _recordContextMenu?.Show(_recordList, args.location);
+    }
+
+    /// <summary>新建记录：创建空白文本记录，打开编辑对话框供用户输入内容</summary>
+    private void BtnNewRecord_Click(object? sender, EventArgs e)
+    {
+        _mainForm.SuppressAutoHide(true);
+        try
+        {
+            var newRecord = new ClipboardRecord
+            {
+                ContentType = ClipboardContentType.PlainText,
+                Content = "",
+                CreateTime = DateTime.UtcNow,
+                ContentHash = ""
+            };
+
+            using var editDialog = new EditRecordDialog(newRecord, _mainForm.Config);
+            editDialog.Text = "新建记录";
+            editDialog.TopMost = true;
+            if (editDialog.ShowDialog(this) == DialogResult.OK)
+            {
+                // 如果用户没有输入任何内容（且未加密），则不添加
+                if (string.IsNullOrWhiteSpace(newRecord.Content) && !newRecord.IsEncrypted)
+                {
+                    MessageBox.Show(this, "记录内容不能为空。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                // 计算内容哈希（未加密时）
+                if (!newRecord.IsEncrypted && string.IsNullOrEmpty(newRecord.ContentHash))
+                {
+                    newRecord.ContentHash = EncryptionService.ComputeContentHash(newRecord.Content);
+                }
+
+                _mainForm.Records.Insert(0, newRecord);
+                _mainForm.SaveData();
+                RefreshRecords();
+            }
+        }
+        finally { _mainForm.SuppressAutoHide(false); }
     }
 
     /// <summary>编辑记录：加密记录需先验证密码，然后打开编辑对话框</summary>

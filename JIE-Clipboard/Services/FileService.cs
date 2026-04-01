@@ -658,6 +658,15 @@ public static class FileService
             var json = System.Text.Encoding.UTF8.GetString(fileBytes);
             var data = JsonSerializer.Deserialize<ExportData>(json, _jsonOptions);
             if (data == null) return (null, null, "备份文件格式无效");
+
+            if (data.Records != null)
+            {
+                var (sanitized, warnings) = SanitizeImportedRecords(data.Records);
+                data.Records = sanitized;
+                if (warnings.Count > 0)
+                    LogService.Log($"Import sanitization: removed {warnings.Count} unsafe records");
+            }
+
             return (data.Records, data.Config, "");
         }
         catch (Exception ex)
@@ -716,6 +725,15 @@ public static class FileService
             var json = System.Text.Encoding.UTF8.GetString(decrypted);
             var data = JsonSerializer.Deserialize<ExportData>(json, _jsonOptions);
             if (data == null) return (null, null, "解密成功但数据格式无效");
+
+            if (data.Records != null)
+            {
+                var (sanitized, warnings) = SanitizeImportedRecords(data.Records);
+                data.Records = sanitized;
+                if (warnings.Count > 0)
+                    LogService.Log($"Encrypted import sanitization: removed {warnings.Count} unsafe records");
+            }
+
             return (data.Records, data.Config, "");
         }
         catch (CryptographicException)
@@ -731,6 +749,107 @@ public static class FileService
         {
             if (key != null) CryptographicOperations.ZeroMemory(key);
         }
+    }
+
+    /// <summary>
+    /// 对导入的记录进行安全清洗，移除危险或异常的记录。
+    /// 防御恶意构造的备份文件（如包含可执行文件路径、路径遍历、超大内容等）。
+    /// </summary>
+    private static (List<ClipboardRecord> sanitized, List<string> warnings) SanitizeImportedRecords(List<ClipboardRecord> records)
+    {
+        var sanitized = new List<ClipboardRecord>();
+        var warnings = new List<string>();
+
+        // 限制导入记录总数
+        const int maxRecordCount = 10000;
+        if (records.Count > maxRecordCount)
+        {
+            warnings.Add($"Record count {records.Count} exceeds limit {maxRecordCount}, truncated");
+            records = records.Take(maxRecordCount).ToList();
+        }
+
+        // 危险文件扩展名黑名单
+        var dangerousExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".exe", ".bat", ".cmd", ".ps1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh",
+            ".scr", ".pif", ".com", ".msi", ".msp", ".mst", ".cpl", ".hta", ".inf", ".reg",
+            ".dll", ".sys", ".drv", ".ocx", ".gadget", ".application", ".appref-ms",
+            ".scf", ".lnk", ".url"
+        };
+
+        const int maxContentLength = 10 * 1024 * 1024; // 10 MB
+
+        foreach (var record in records)
+        {
+            // 验证 ContentType 是合法枚举值
+            if (!Enum.IsDefined(typeof(ClipboardContentType), record.ContentType))
+            {
+                warnings.Add($"Invalid ContentType {(int)record.ContentType} for record {record.Id}");
+                continue;
+            }
+
+            // 检查内容长度
+            if ((record.Content?.Length ?? 0) > maxContentLength)
+            {
+                warnings.Add($"Content too large ({record.Content!.Length} chars) for record {record.Id}");
+                continue;
+            }
+
+            // 加密记录的 EncryptedData 长度检查
+            if (record.IsEncrypted && (record.EncryptedData?.Length ?? 0) > maxContentLength)
+            {
+                warnings.Add($"EncryptedData too large for record {record.Id}");
+                continue;
+            }
+
+            // 对包含文件路径的类型进行路径安全检查
+            if (record.ContentType is ClipboardContentType.FileDrop or ClipboardContentType.Video
+                or ClipboardContentType.Folder or ClipboardContentType.Image)
+            {
+                if (!string.IsNullOrEmpty(record.Content) && !record.IsEncrypted)
+                {
+                    var paths = record.Content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                    bool pathUnsafe = false;
+                    foreach (var p in paths)
+                    {
+                        var trimmed = p.Trim();
+                        // 拒绝路径遍历
+                        if (trimmed.Contains(".."))
+                        {
+                            warnings.Add($"Path traversal detected in record {record.Id}: {trimmed}");
+                            pathUnsafe = true;
+                            break;
+                        }
+                        // 拒绝 UNC 路径（防止 SMB 凭证泄露等攻击）
+                        if (trimmed.StartsWith(@"\\"))
+                        {
+                            warnings.Add($"UNC path detected in record {record.Id}");
+                            pathUnsafe = true;
+                            break;
+                        }
+                        // 检查危险扩展名
+                        var ext = Path.GetExtension(trimmed);
+                        if (!string.IsNullOrEmpty(ext) && dangerousExtensions.Contains(ext))
+                        {
+                            warnings.Add($"Dangerous extension '{ext}' in record {record.Id}");
+                            pathUnsafe = true;
+                            break;
+                        }
+                    }
+                    if (pathUnsafe) continue;
+                }
+            }
+
+            // 清理潜在的恶意字段值
+            record.PasswordFailCount = Math.Max(0, record.PasswordFailCount);
+            record.MaxPasswordAttempts = Math.Clamp(record.MaxPasswordAttempts, 1, 100);
+            record.CurrentCopyCount = Math.Max(0, record.CurrentCopyCount);
+            record.MaxCopyCount = Math.Max(0, record.MaxCopyCount);
+
+            sanitized.Add(record);
+        }
+
+        return (sanitized, warnings);
     }
 
     /// <summary>备份损坏的文件（重命名加时间戳后缀）</summary>
